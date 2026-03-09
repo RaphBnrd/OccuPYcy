@@ -13,6 +13,10 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
 ]
 authors = [{name = "Raphaël Benerradi"}]
+dependencies = [
+  "numpy>=2.0",
+  "torch>=2.0"
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
