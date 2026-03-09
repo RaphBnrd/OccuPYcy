@@ -55,11 +55,11 @@ def _validate_inputs(
     if n_sites == 0 or n_visits == 0 or n_species == 0:
         raise ValueError("Empty inputs are not supported (n_sites, n_visits, n_species must be > 0).")
 
-    if visit_site_idxs.unique().shape[0] > n_sites:
-        raise ValueError(
-            f"visit_site_idxs contains more unique site indices than available sites: "
-            f"unique={visit_site_idxs.unique().shape[0]}, n_sites={n_sites}."
-        )
+    min_idx = int(visit_site_idxs.min().item())
+    max_idx = int(visit_site_idxs.max().item())
+    n_idx = visit_site_idxs.unique().numel()
+    if min_idx != 0 or max_idx != n_sites - 1 or n_idx != n_sites:
+        raise ValueError(f"visit_site_idxs must be in [0, n_sites-1] with no missing indices, but got min {min_idx}, max {max_idx}, unique count {n_idx} for X_psi rows {n_sites}.")
 
     return n_sites, n_visits, n_species
 

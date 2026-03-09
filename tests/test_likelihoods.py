@@ -1,3 +1,4 @@
+import pytest
 import torch
 import numpy as np
 from occupycy.likelihood import nll_logits, nll_probs
@@ -19,6 +20,17 @@ def numpy_nll(y, psi, d, visit_site_idxs):
                 expected_nll[s, k] = - np.log(1 - psi[s, k] + psi[s, k] * np.prod(1 - d[visit_site_idxs == s, k]))
     return expected_nll
 
+def test_raises_if_visit_site_idxs_out_of_range():
+    visit_site_idxs = torch.tensor([0, 0, 2], dtype=torch.int64)
+    y = torch.tensor([[0.0], [0.0], [1.0]])
+    logit_psi = torch.zeros((2, 1), requires_grad=True)
+    logit_d = torch.ones((3, 1), requires_grad=True)
+
+    with pytest.raises(ValueError, match="visit_site_idxs must be in"):
+        nll_logits(
+            y, logit_psi=logit_psi, logit_d=logit_d, visit_site_idxs=visit_site_idxs,
+            species_reduction="none", site_reduction="none"
+        )
 
 def test_nll_probs(tol=1e-6):
 
