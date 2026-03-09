@@ -5,3 +5,5 @@ def test_import_and_api():
 
     assert hasattr(occupycy, "data")
     assert hasattr(occupycy, "likelihood")
+    assert hasattr(occupycy, "models")
+    assert hasattr(occupycy, "fit")
