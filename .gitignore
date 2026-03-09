@@ -1,0 +1,16 @@
+# Python packaging/build artifacts
+*.egg-info/
+build/
+dist/
+
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
+.venv/
+
+# Other
+.DS_Store
+tuto.md

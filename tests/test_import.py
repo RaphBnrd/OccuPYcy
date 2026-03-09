@@ -1,3 +1,5 @@
-def test_import():
+def test_import_and_api():
     import occupycy
-    assert occupycy.__version__ == "0.0.0"
+
+    assert isinstance(occupycy.__version__, str)
+    assert hasattr(occupycy, "DraftClass")
