@@ -1,20 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Callable, Optional
 
 import torch
 
+from .result import FitResult
 from occupycy.data import OccuData
 from occupycy.likelihood import nll_logits
 from occupycy.models import OccuModel
-
-
-@dataclass(frozen=True)
-class FitResult:
-    nll: float
-    n_iter: int
-    converged: bool
 
 
 def fit_lbfgs_full_batch(
@@ -22,6 +15,8 @@ def fit_lbfgs_full_batch(
     model: OccuModel,
     *,
     max_iter: int = 200,
+    # lr_psi: float = 1.0,
+    # lr_d: float = 1.0,
     lr: float = 1.0,
     tolerance_grad: float | None = None,
     tolerance_change: float | None = None,
@@ -30,6 +25,7 @@ def fit_lbfgs_full_batch(
     site_reduction: str = "sum",
     species_reduction: str = "mean",
     loss_fn: Callable[..., torch.Tensor] = nll_logits,
+    device: Optional[torch.device] = None,
 ) -> FitResult:
     """
     General full-batch LBFGS fitting for any OccuModel.
@@ -45,11 +41,9 @@ def fit_lbfgs_full_batch(
       - X_psi optional: (n_sites, n_cov_psi)
       - X_d optional: (n_visits, n_cov_d)
     """
-    params = [p for p in model.parameters() if p.requires_grad]
-    if len(params) == 0:
-        raise ValueError("Model has no trainable parameters (requires_grad=True).")
 
-    device = next(model.parameters()).device
+    if device is None:
+        device = next(model.psi_model.parameters()).device
     data = data.to(device=device)
 
     y = data.y
@@ -61,7 +55,7 @@ def fit_lbfgs_full_batch(
     X_psi = data.X_psi
     X_d = data.X_d
 
-    lbfgs_kwargs = dict(lr=lr, max_iter=max_iter)
+    lbfgs_kwargs = dict(max_iter=max_iter)
 
     if tolerance_grad is not None:
         lbfgs_kwargs["tolerance_grad"] = tolerance_grad
@@ -72,13 +66,21 @@ def fit_lbfgs_full_batch(
     if line_search_fn is not None:
         lbfgs_kwargs["line_search_fn"] = line_search_fn
 
-    opt = torch.optim.LBFGS(params, **lbfgs_kwargs)
+    # opt_psi = torch.optim.LBFGS(model.psi_model.parameters(), lr=lr_psi, **lbfgs_kwargs)
+    # opt_d = torch.optim.LBFGS(model.d_model.parameters(), lr=lr_d, **lbfgs_kwargs)
+    opt = torch.optim.LBFGS(
+        list(model.psi_model.parameters()) + list(model.d_model.parameters()),
+        lr=lr, **lbfgs_kwargs
+    )
 
     n_iter = 0
     last_loss = None
+    train_loss_history = []
 
     def closure():
         nonlocal n_iter, last_loss
+        # opt_psi.zero_grad(set_to_none=True)
+        # opt_d.zero_grad(set_to_none=True)
         opt.zero_grad(set_to_none=True)
 
         logit_psi, logit_d = model.forward_logits(X_psi=X_psi, X_d=X_d)
@@ -117,10 +119,26 @@ def fit_lbfgs_full_batch(
         loss.backward()
         last_loss = loss.detach()
         n_iter += 1
+        train_loss_history.append(float(last_loss.cpu().item()))
         return loss
 
+    # loss = opt_psi.step(closure)
+    # opt_d.step(closure)
     loss = opt.step(closure)
+
     final = last_loss if last_loss is not None else loss.detach()
 
     # LBFGS doesn't expose a robust convergence flag; keep best-effort.
-    return FitResult(nll=float(final.cpu().item()), n_iter=n_iter, converged=True)
+    return FitResult(
+        final_train_loss=float(final.cpu().item()), 
+        n_epochs=n_iter, 
+        converged=True,
+        loss_history={"train_loss": train_loss_history},
+        # lr_psi=lr_psi,
+        # lr_d=lr_d,
+        lr_psi=lr,
+        lr_d=lr,
+        optimizer_psi="LBFGS",
+        optimizer_d="LBFGS",
+        device=device
+    )

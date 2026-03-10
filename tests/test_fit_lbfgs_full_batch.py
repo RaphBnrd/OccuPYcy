@@ -32,5 +32,5 @@ def test_fit_lbfgs():
     model = ConstantOccuModel(n_species=data.n_species)
     res = fit_lbfgs_full_batch(data, model, max_iter=50)
 
-    assert math.isfinite(res.nll)
-    assert res.n_iter > 0
+    assert math.isfinite(res.final_train_loss)
+    assert res.n_epochs > 0

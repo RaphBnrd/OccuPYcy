@@ -5,8 +5,20 @@ import torch
 import torch.nn as nn
 
 
-class OccuModel(nn.Module, ABC):
+class OccuModel(ABC):
     """Model that maps covariates -> logits. Subclasses should implement component predictors."""
+    
+    def __init__(
+        self,
+        psi_model: Optional[nn.Module] = None,
+        d_model: Optional[nn.Module] = None,
+        n_species: int = 1,
+    ):
+        super().__init__()
+
+        self.psi_model = psi_model
+        self.d_model = d_model
+        self.n_species = n_species
 
     @abstractmethod
     def predict_logit_psi(self, X_psi: Optional[torch.Tensor] = None) -> torch.Tensor:

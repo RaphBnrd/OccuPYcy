@@ -14,25 +14,35 @@ class ConstantOccuModel(OccuModel):
     """
 
     def __init__(self, n_species: int):
-        super().__init__()
-        self.n_species = n_species
-        # parameters are species-level logits
-        self.logit_psi_species = nn.Parameter(torch.zeros(n_species))
-        self.logit_d_species = nn.Parameter(torch.zeros(n_species))
+        super().__init__(n_species=n_species)
+        
+        self.psi_model = ConstantBlock(n_species)
+        self.d_model = ConstantBlock(n_species)
 
     def predict_logit_psi(self, X_psi: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         If X_psi is provided, only its first dim is used to infer n_sites_sub.
         If X_psi is None, user must rely on trainer to know n_sites and use broadcasting after call.
         """
-        if X_psi is None:
-            # caller must expand result to desired n_sites
-            return self.logit_psi_species.unsqueeze(0)  # shape: (1, n_species)
-        n_sites_sub = X_psi.shape[0]
-        return self.logit_psi_species.unsqueeze(0).expand(n_sites_sub, -1)  # (n_sites_sub, n_species)
+        return self.psi_model(X_psi)
 
     def predict_logit_d(self, X_d: Optional[torch.Tensor] = None) -> torch.Tensor:
-        if X_d is None:
-            return self.logit_d_species.unsqueeze(0)  # (1, n_species)
-        n_visits_sub = X_d.shape[0]
-        return self.logit_d_species.unsqueeze(0).expand(n_visits_sub, -1)  # (n_visits_sub, n_species)
+        """
+        If X_d is provided, only its first dim is used to infer n_visits_sub.
+        If X_d is None, user must rely on trainer to know n_visits and use broadcasting after call.
+        """
+        return self.d_model(X_d)
+
+class ConstantBlock(nn.Module):
+    """
+    Block of constant logits.
+    """
+    def __init__(self, n_species: int):
+        super().__init__()
+        self.logit_species = nn.Parameter(torch.zeros(n_species))
+
+    def forward(self, X: Optional[torch.Tensor] = None) -> torch.Tensor:
+        if X is None:
+            return self.logit_species.unsqueeze(0)  # shape: (1, n_species)
+        n_sub = X.shape[0]
+        return self.logit_species.unsqueeze(0).expand(n_sub, -1)  # (n_sub, n_species)
