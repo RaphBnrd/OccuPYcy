@@ -5,8 +5,8 @@ import polars as pl
 
 from occupycy.data.core import OccuData
 from occupycy.fit import fit_lbfgs_full_batch, fit_sgd_like
-from occupycy.likelihood import nll_probs
-from occupycy.models.constant import ConstantOccuModel
+from occupycy.likelihood import nll_probs, nll_logits
+from occupycy.models import ConstantOccuModel
 
 
 def simulate_constant(
@@ -14,9 +14,9 @@ def simulate_constant(
         n_visits_per_site=25, 
         psi=torch.tensor([0.7, 0.5, 0.1, 0.05]),
         d=torch.tensor([0.01, 0.1, 0.9, 0.99]),
-        seed=123
+        seed=None
     ):
-    g = torch.Generator().manual_seed(seed)
+    g = torch.Generator().manual_seed(seed) if seed is not None else None
     n_species = psi.shape[0]
     z = torch.bernoulli(psi.expand(n_sites, n_species), generator=g)
     visit_site_idxs = torch.arange(n_sites).repeat_interleave(n_visits_per_site)
@@ -43,15 +43,25 @@ def main():
     n_sites = torch.unique(visit_site_idxs).numel()
     n_visits = visit_site_idxs.shape[0]
     
-    nll_true = nll_probs(
+    # nll_true = nll_probs(
+    #     y, visit_site_idxs=visit_site_idxs, 
+    #     psi=true_psi.unsqueeze(0).expand(n_sites, -1),
+    #     d=true_d.unsqueeze(0).expand(n_visits, -1)
+    # ).item()
+    # nll_observed = nll_probs(
+    #     y, visit_site_idxs=visit_site_idxs, 
+    #     psi=observed_psi.unsqueeze(0).expand(n_sites, -1),
+    #     d=observed_d.unsqueeze(0).expand(n_visits, -1)
+    # ).item()
+    nll_true = nll_logits(
         y, visit_site_idxs=visit_site_idxs, 
-        psi=true_psi.unsqueeze(0).expand(n_sites, -1),
-        d=true_d.unsqueeze(0).expand(n_visits, -1)
+        logit_psi=torch.logit(true_psi.unsqueeze(0).expand(n_sites, -1)),
+        logit_d=torch.logit(true_d.unsqueeze(0).expand(n_visits, -1))
     ).item()
-    nll_observed = nll_probs(
+    nll_observed = nll_logits(
         y, visit_site_idxs=visit_site_idxs, 
-        psi=observed_psi.unsqueeze(0).expand(n_sites, -1),
-        d=observed_d.unsqueeze(0).expand(n_visits, -1)
+        logit_psi=torch.logit(observed_psi.unsqueeze(0).expand(n_sites, -1)),
+        logit_d=torch.logit(observed_d.unsqueeze(0).expand(n_visits, -1))
     ).item()
 
     all_results = pl.DataFrame({
@@ -119,20 +129,17 @@ def main():
         }))
         
         plt.plot(res.loss_history["train_loss"], label=f"{fit_method}\n(final nll={res.final_train_loss:.2f})")
+        # Plot horizontal lines for true and observed nll
         plt.yscale("log")
         plt.grid(True, which="both", ls="--")
         plt.xlabel("Epoch")
         plt.ylabel("Train Loss")
+    plt.axhline(nll_true, color="gray", linestyle="--", label=f"(true nll={nll_true:.2f})")
+    plt.axhline(nll_observed, color="black", linestyle="--", label=f"(observed nll={nll_observed:.2f})")
 
     # --- Show results ---
 
-    df_results = pl.DataFrame(all_results)
-    print(
-        df_results
-        .select(["fit_method", "n_epochs", "converged", "final_train_loss"])
-        .unique().sort(by="final_train_loss")
-    )
-    df_results = df_results.pivot(
+    df_results = pl.DataFrame(all_results).pivot(
         index=["fit_method", "n_epochs", "converged", "final_train_loss"],
         on="species_idx",
         values=["psi_hat", "d_hat"],

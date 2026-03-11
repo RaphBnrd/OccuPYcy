@@ -54,7 +54,8 @@ def fit_sgd_like(
 
     for epoch in range(n_epochs):
         
-        print(f"\rEpoch {str(epoch + 1).zfill(len(str(n_epochs)))}/{n_epochs}", end="", flush=True)
+        if (epoch+1) % max(1, n_epochs // 20) == 0 or epoch+1 == n_epochs:
+            print(f"\rEpoch {str(epoch + 1).zfill(len(str(n_epochs)))}/{n_epochs}", end="", flush=True)
 
         current_loss = []
 

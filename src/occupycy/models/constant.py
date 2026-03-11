@@ -12,7 +12,6 @@ class ConstantOccuModel(OccuModel):
     """
     Constant-per-species model. 
     """
-
     def __init__(self, n_species: int):
         super().__init__(n_species=n_species)
         
