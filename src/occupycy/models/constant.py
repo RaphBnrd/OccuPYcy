@@ -41,6 +41,9 @@ class ConstantBlock(nn.Module):
         self.logit_species = nn.Parameter(torch.zeros(n_species))
 
     def forward(self, X: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """
+        X is a tensor of shape (n_sub, n_cov), or None. Only the first dim (n_sub) is used to infer the number of samples to expand the constant logits to.
+        """
         if X is None:
             return self.logit_species.unsqueeze(0)  # shape: (1, n_species)
         n_sub = X.shape[0]
