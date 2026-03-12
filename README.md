@@ -1,6 +1,6 @@
 # OccuPYcy
 
-OccuPYcy is a Python package for occupancy modeling. It provides tools for fitting occupancy models using maximum likelihood estimation through (stochastic) gradient descent optimization. 
+OccuPYcy is a package for <u>**occu**</u>pan<u>**cy**</u> modeling in <u>**PY**</u>thon. It provides tools for fitting occupancy models using maximum likelihood estimation through (stochastic) gradient descent optimization. 
 
 
 ## Local developpement commands
@@ -44,6 +44,10 @@ uv run pytest -q
 - [ ] Allow user-defined split
 ### Cleaning
 - [ ] Delete matplotlib dependency
+### Documentation
+- [ ] Docstrings for all functions and classes
+- [ ] Full documentation
+- [ ] Detailed examples for some use cases
 
 
 ## License
