@@ -14,10 +14,12 @@ classifiers = [
 ]
 authors = [{name = "Raphaël Benerradi"}]
 dependencies = [
+  "ipykernel>=7.0",
   "matplotlib>=3.0",
   "polars>=1.0",
   "numpy>=2.0",
-  "torch>=2.0"
+  "torch>=2.0",
+  "tqdm>=4.0",
 ]
 
 [project.optional-dependencies]

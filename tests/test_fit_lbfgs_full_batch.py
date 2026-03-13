@@ -19,15 +19,15 @@ def simulate_constant(
     g = torch.Generator().manual_seed(seed)
 
     z = torch.bernoulli(torch.full((n_sites, n_species), psi), generator=g)
-    visit_site_idxs = torch.arange(n_sites).repeat_interleave(n_visits_per_site)
-    z_for_visit = z[visit_site_idxs]
-    y = torch.bernoulli(torch.full((visit_site_idxs.shape[0], n_species), d), generator=g) * z_for_visit
-    return y.float(), visit_site_idxs.long()
+    indices_visit_site = torch.arange(n_sites).repeat_interleave(n_visits_per_site)
+    z_for_visit = z[indices_visit_site]
+    y = torch.bernoulli(torch.full((indices_visit_site.shape[0], n_species), d), generator=g) * z_for_visit
+    return y.float(), indices_visit_site.long().tolist()
 
 
 def test_fit_lbfgs():
-    y, visit_site_idxs = simulate_constant(seed=123)
-    data = OccuData(y=y, visit_site_idxs=visit_site_idxs)
+    y, visit_site_ids = simulate_constant(seed=123)
+    data = OccuData(y=y, visit_site_ids=visit_site_ids)
 
     model = ConstantOccuModel(n_species=data.n_species)
     res = fit_lbfgs_full_batch(data, model, max_iter=50)

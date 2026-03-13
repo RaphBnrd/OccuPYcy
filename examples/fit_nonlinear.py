@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import polars as pl
 import copy
 
-from occupycy.data.core import OccuData
+from occupycy.data import OccuData
 from occupycy.fit import fit_lbfgs_full_batch, fit_sgd_like
 from occupycy.likelihood import nll_probs, nll_logits
 from occupycy.models import MLPOccuModel, LinearMLPOccuModel
@@ -34,14 +34,14 @@ def simulate_non_linear(
     # Define the number of visits per site
     n_visits_per_site = f_effort(X_psi[:, 0])  # shape: (n_sites,)
     n_visits_per_site = n_visits_per_site.round().long().clamp(min=0)  # shape: (n_sites,)
-    visit_site_idxs = torch.arange(n_sites).repeat_interleave(n_visits_per_site)  # shape: (n_visits,)
+    indices_visit_site = torch.arange(n_sites).repeat_interleave(n_visits_per_site)  # shape: (n_visits,)
     # Filter out sites with zero visits
     if n_total_visits_max is not None: # Randomly subsample visits to have at most n_total_visits_max
-        if visit_site_idxs.shape[0] > n_total_visits_max:
-            print(f"Subsampling from {visit_site_idxs.shape[0]} visits to {n_total_visits_max} visits.")
-            perm = torch.randperm(visit_site_idxs.shape[0], generator=g)
-            visit_site_idxs = visit_site_idxs[perm[:n_total_visits_max]] # shape: (n_visits_sub,)
-    n_visits_per_site = torch.bincount(visit_site_idxs, minlength=n_sites)  # shape: (n_sites,) (for each site, how many visits it has)
+        if indices_visit_site.shape[0] > n_total_visits_max:
+            print(f"Subsampling from {indices_visit_site.shape[0]} visits to {n_total_visits_max} visits.")
+            perm = torch.randperm(indices_visit_site.shape[0], generator=g)
+            indices_visit_site = indices_visit_site[perm[:n_total_visits_max]] # shape: (n_visits_sub,)
+    n_visits_per_site = torch.bincount(indices_visit_site, minlength=n_sites)  # shape: (n_sites,) (for each site, how many visits it has)
     # Reassign site indices to be consecutive after filtering
     map_sites_to_sub = {}
     curr_idx = 0
@@ -50,15 +50,15 @@ def simulate_non_linear(
             map_sites_to_sub[i] = curr_idx
             curr_idx += 1
     n_sites_sub = curr_idx
-    visit_site_idxs = torch.tensor([map_sites_to_sub[idx.item()] for idx in visit_site_idxs], dtype=torch.long)  # shape: (n_visits_sub,)
-    n_visits_sub = visit_site_idxs.shape[0]
+    indices_visit_site = torch.tensor([map_sites_to_sub[idx.item()] for idx in indices_visit_site], dtype=torch.long)  # shape: (n_visits_sub,)
+    n_visits_sub = indices_visit_site.shape[0]
     X_psi = X_psi[torch.tensor(list(map_sites_to_sub.keys()))]  # shape: (n_sites_sub, n_cov_psi)
 
     X_d = torch.randn(n_visits_sub, n_cov_d, generator=g)  # shape: (n_visits_sub, n_cov_d)
 
     psi = f_psi(X_psi)  # shape: (n_sites_sub, n_species)
     z = torch.bernoulli(psi, generator=g)  # shape: (n_sites_sub, n_species)
-    z_for_visit = z[visit_site_idxs]  # shape: (n_visits_sub, n_species)
+    z_for_visit = z[indices_visit_site]  # shape: (n_visits_sub, n_species)
     
     d = f_d(X_d)  # shape: (n_visits_sub, n_species)
     
@@ -69,42 +69,59 @@ def simulate_non_linear(
         print("--- Simulated data summary ---")
         print(f"  n_sites={n_sites_sub}")
         print(f"  n_visits={n_visits_sub}")
+        print(f"  range of psi * d: {(psi[indices_visit_site] * d).min():3e} to { (psi[indices_visit_site] * d).max():3e}")
         print(f"  observed average psi (knowing true occupancy): {z.mean(dim=0)}")
         print(f"  observed average d (knowing true occupancy):   {y.sum(dim=0) / z_for_visit.sum(dim=0)}")
 
     if plot_summary:
-        fig, axes = plt.subplots(3, psi.shape[1], figsize=(8, 6))
-        gs = fig.add_gridspec(3, psi.shape[1])
+        fig, axes = plt.subplots(psi.shape[1]+1, 3, figsize=(10, (psi.shape[1]+1)*2))
+        gs = fig.add_gridspec(psi.shape[1]+1, 3)
         # Histogram of n_visits_per_site
         ax0 = fig.add_subplot(gs[0, :])
-        # logbins = np.logspace(0, np.log10(n_visits_per_site.max().item()), 30)
-        # ax0.hist(n_visits_per_site.cpu(), bins=logbins, edgecolor='k')
-        # ax0.set_xscale("log")
-        ax0.hist(n_visits_per_site.cpu(), bins=30, edgecolor='k')
+        logbins = torch.logspace(torch.log10(n_visits_per_site[n_visits_per_site>0].min()), torch.log10(n_visits_per_site.max()), 30)
+        ax0.hist(n_visits_per_site.cpu(), bins=logbins, edgecolor='k')
+        ax0.set_xscale("log")
+        # ax0.hist(n_visits_per_site.cpu(), bins=50, edgecolor='k')
         ax0.set_xlabel("Number of visits per site")
         ax0.set_ylabel("Frequency")
-        ax0.set_title("Distribution of visits per site")
+        ax0.set_title(f"Distribution of visits per site ({(n_visits_per_site>0).sum()}/{n_sites} sites with >0 visits)")
         ax0.grid(True)
         ax0.set_yscale("log")
-        for i in range(psi.shape[1]):
+        for i in range(3):
             axes[0, i].axis('off')
         # Histogram of psi
         for species_idx in range(psi.shape[1]):
-            axes[1, species_idx].hist(psi[:, species_idx].cpu(), bins=30, edgecolor='k')
-            axes[1, species_idx].set_xlabel("Occupancy probability (psi)")
-            axes[1, species_idx].set_ylabel("Frequency")
-            axes[1, species_idx].grid(True)
-            axes[1, species_idx].set_title(f"psi (species {species_idx})")
+            tmp = psi[:, species_idx]
+            logbins = torch.logspace(torch.log10(tmp.min()), torch.log10(tmp.max()), 30)
+            axes[species_idx+1, 0].hist(tmp.cpu(), bins=logbins, edgecolor='k')
+            axes[species_idx+1, 0].set_xlabel("Occupancy probability (psi)")
+            axes[species_idx+1, 0].set_ylabel("Frequency")
+            axes[species_idx+1, 0].grid(True)
+            axes[species_idx+1, 0].set_title(f"psi (species {species_idx})")
+            axes[species_idx+1, 0].set_xscale("log")
         # Histogram of d
         for species_idx in range(d.shape[1]):
-            axes[2, species_idx].hist(d[:, species_idx].cpu(), bins=30, edgecolor='k')
-            axes[2, species_idx].set_xlabel("Detection probability (d)")
-            axes[2, species_idx].set_ylabel("Frequency")
-            axes[2, species_idx].grid(True)
-            axes[2, species_idx].set_title(f"d (species {species_idx})")
+            tmp = d[:, species_idx]
+            logbins = torch.logspace(torch.log10(tmp.min()), torch.log10(tmp.max()), 30)
+            axes[species_idx+1, 1].hist(tmp.cpu(), bins=logbins, edgecolor='k')
+            axes[species_idx+1, 1].set_xlabel("Detection probability (d)")
+            axes[species_idx+1, 1].set_ylabel("Frequency")
+            axes[species_idx+1, 1].grid(True)
+            axes[species_idx+1, 1].set_title(f"d (species {species_idx})")
+            axes[species_idx+1, 1].set_xscale("log")
+        # Histogram of psi*d
+        for species_idx in range(psi.shape[1]):
+            tmp = psi[indices_visit_site, species_idx] * d[:, species_idx]
+            logbins = torch.logspace(torch.log10(tmp.min()), torch.log10(tmp.max()), 30)
+            axes[species_idx+1, 2].hist(tmp.cpu(), bins=logbins, edgecolor='k')
+            axes[species_idx+1, 2].set_xlabel("Effective detection probability (psi * d)")
+            axes[species_idx+1, 2].set_ylabel("Frequency")
+            axes[species_idx+1, 2].grid(True)
+            axes[species_idx+1, 2].set_title(f"psi*d (species {species_idx})")
+            axes[species_idx+1, 2].set_xscale("log")
         fig.tight_layout()
 
-    return y.float(), visit_site_idxs.long(), X_psi.float(), X_d.float(), z.float()
+    return y.float(), indices_visit_site.long().tolist(), X_psi.float(), X_d.float(), z.float()
 
 
 def main():
@@ -178,18 +195,19 @@ def main():
     #     logit2 = logit2.clamp(torch.logit(torch.tensor(eps)), torch.logit(torch.tensor(1-eps)))
     #     return torch.sigmoid(logit1 + logit2)
 
-    y, visit_site_idxs, X_psi, X_d, true_z = simulate_non_linear(
+    y, visit_site_ids, X_psi, X_d, true_z = simulate_non_linear(
         n_sites=1000, 
-        n_total_visits_max=int(1e6),
+        n_total_visits_max=int(1e5),
         n_cov_psi=n_cov_psi,
         n_cov_d=n_cov_d,
-        # f_effort=lambda x1: torch.exp(3*x1),
+        f_effort=lambda x1: torch.exp(3*x1),
         # f_effort=lambda x1: 10 * x1 ** 2,
-        f_effort=lambda x1: torch.ones_like(x1) * 100,
+        # f_effort=lambda x1: torch.ones_like(x1) * 100,
         f_psi=true_f_psi,
         f_d=true_f_d,
         seed=None,
-        plot_summary=False
+        plot_summary=False,
+        verbose=True
     )
 
     # --- Initialize results DataFrame ---
@@ -197,7 +215,7 @@ def main():
     eps = 1e-8
     true_logit_psi = torch.logit(true_f_psi(X_psi).clamp(eps, 1-eps))
     true_logit_d = torch.logit(true_f_d(X_d).clamp(eps, 1-eps))
-    nll_true = nll_logits(y, visit_site_idxs=visit_site_idxs, logit_psi=true_logit_psi, logit_d=true_logit_d).item()
+    nll_true = nll_logits(y, indices_visit_site=torch.tensor(visit_site_ids), logit_psi=true_logit_psi, logit_d=true_logit_d).item()
 
     df_results = pl.DataFrame({
         "model": ['true'],
@@ -209,7 +227,7 @@ def main():
     
     # --- Build OccuData ---
     
-    data = OccuData(y=y, visit_site_idxs=visit_site_idxs, X_psi=X_psi, X_d=X_d)
+    data = OccuData(y=y, visit_site_ids=visit_site_ids, X_psi=X_psi, X_d=X_d)
 
     # --- Define models, learning rates and fitting methods ---
     
@@ -258,17 +276,25 @@ def main():
             'methods': ['adam'],
             'lrs': [3e-3]
         },
-        "linear-psi-d": {
+        "linear-psi-d (adam)": {
             'model': MLPOccuModel(
                 n_species=y.shape[1], n_cov_psi=X_psi.shape[1], n_cov_d=X_d.shape[1],
                 hidden_dims_psi=[], hidden_dims_d=[],
                 activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU,
                 dropout_psi=0.0, dropout_d=0.0
             ), 
-            # 'methods': ['lbfgs_full_batch'],
-            # 'lrs': [1e-4]
             'methods': ['adam'],
             'lrs': [1e-2]
+        },
+        "linear-psi-d (lbfgs)": {
+            'model': MLPOccuModel(
+                n_species=y.shape[1], n_cov_psi=X_psi.shape[1], n_cov_d=X_d.shape[1],
+                hidden_dims_psi=[], hidden_dims_d=[],
+                activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU,
+                dropout_psi=0.0, dropout_d=0.0
+            ), 
+            'methods': ['lbfgs_full_batch'],
+            'lrs': [1e-4]
         },
         # "constant-psi-d": {
         #     'model': MLPOccuModel(

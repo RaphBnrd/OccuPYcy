@@ -1,13 +1,54 @@
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, Optional, Dict, Tuple
 
 import torch
+from tqdm import tqdm
 
 from .result import FitResult
 from occupycy.data import OccuData
 from occupycy.likelihood import nll_logits
 from occupycy.models import OccuModel
+
+
+def forward_path_one_batch(
+    batch,
+    model: OccuModel,
+    loss_fn: Callable[..., torch.Tensor],
+    site_reduction: str,
+    species_reduction: str,
+    device: torch.device
+):
+    batch.to(device=device)
+    y = batch.y
+    indices_visit_site = batch.indices_visit_site
+    X_psi = batch.X_psi
+    X_d = batch.X_d
+
+    logit_psi, logit_d = model.forward_logits(
+        X_psi=X_psi,
+        X_d=X_d,
+    )
+
+    # Broadcast if intercept-only
+    if X_psi is None:
+        logit_psi = logit_psi.expand(batch.n_sites, -1)
+    if X_d is None:
+        logit_d = logit_d.expand(batch.n_visits, -1)
+    
+    loss = loss_fn(
+        y,
+        logit_psi=logit_psi,
+        logit_d=logit_d,
+        indices_visit_site=indices_visit_site,
+        site_reduction=site_reduction,
+        species_reduction=species_reduction,
+    )
+
+    if not torch.isfinite(loss):
+        raise ValueError(f"Non-finite loss encountered: {loss.item()}")
+    
+    return loss
 
 
 def fit_sgd_like(
@@ -25,7 +66,10 @@ def fit_sgd_like(
     loss_fn: Callable[..., torch.Tensor] = nll_logits,
     device: Optional[torch.device] = None,
     seed_dataloader: Optional[int] = None,
-) -> FitResult:
+    val_fraction: float = 0.0,
+    test_fraction: float = 0.0,
+    splitting: Optional[Dict[str, list]] = None,
+) -> Tuple[FitResult, OccuData]:
     """
     Mini-batch SGD-style fitting for any OccuModel.
     """
@@ -37,78 +81,111 @@ def fit_sgd_like(
     model.d_model = model.d_model.to(device)
 
     # Build dataloader (sites batched)
-    data_with_dataloader = data.with_dataloaders(
-        batch_size=batch_size,
-        val_fraction=0.0,
-        test_fraction=0.0,
-        shuffle=True,
-        seed=seed_dataloader,
-        device=device
-    )
+    if data.train_loader is None:
+        print("Building dataloader for training...")
+        data.build_dataloaders(
+            batch_size=batch_size,
+            val_fraction=val_fraction,
+            test_fraction=test_fraction,
+            splitting=splitting,
+            shuffle=True,
+            seed=seed_dataloader,
+            device=device
+        )
+    else:
+        if next(iter(data.train_loader)).n_sites != batch_size:
+            print(f"Warning: provided dataloader has batch size {next(iter(data.train_loader)).n_sites}, which does not match the specified batch_size {batch_size}. Using the provided dataloader's batch size.")
 
-    opt_psi = optimizer_psi_cls(model.psi_model.parameters(), lr=lr_psi)
-    opt_d = optimizer_d_cls(model.d_model.parameters(), lr=lr_d)
+    # Optimizer
+    if optimizer_psi_cls == torch.optim.LBFGS or optimizer_d_cls == torch.optim.LBFGS:
+        if optimizer_psi_cls != optimizer_d_cls:
+            raise ValueError("LBFGS optimizer must be used for both psi and d.")
+        if lr_psi != lr_d:
+            raise ValueError("LBFGS optimizer must use the same learning rate for psi and d.")
+        opt = torch.optim.LBFGS(
+            list(model.psi_model.parameters()) + list(model.d_model.parameters()),
+            lr=lr_psi, max_iter=1
+        )
+    else:
+        opt_psi = optimizer_psi_cls(model.psi_model.parameters(), lr=lr_psi)
+        opt_d = optimizer_d_cls(model.d_model.parameters(), lr=lr_d)
 
-    last_loss = None
     train_loss_history = []
+    val_loss_history = []
 
+    pbar = tqdm(range(n_epochs), desc="Epochs", unit="epoch")
     for epoch in range(n_epochs):
         
-        if (epoch+1) % max(1, n_epochs // 20) == 0 or epoch+1 == n_epochs:
-            print(f"\rEpoch {str(epoch + 1).zfill(len(str(n_epochs)))}/{n_epochs}", end="", flush=True)
+        last_train_loss = 0.0
+        for batch in data.train_loader:
 
-        current_loss = []
-
-        for batch in data_with_dataloader.train_loader:
-
-            batch = batch.to(device=device)
-            y = batch.y
-            visit_site_idxs = batch.visit_site_idxs
-            X_psi = batch.X_psi
-            X_d = batch.X_d
-
-            opt_psi.zero_grad()
-            opt_d.zero_grad()
-
-            logit_psi, logit_d = model.forward_logits(
-                X_psi=X_psi,
-                X_d=X_d,
-            )
-
-            # Broadcast if intercept-only
-            if X_psi is None:
-                logit_psi = logit_psi.expand(batch.n_sites, -1)
-            if X_d is None:
-                logit_d = logit_d.expand(batch.n_visits, -1)
+            if optimizer_psi_cls == torch.optim.LBFGS:
+                def closure():
+                    opt.zero_grad()
+                    loss = forward_path_one_batch(
+                        batch=batch,
+                        model=model,
+                        loss_fn=loss_fn,
+                        site_reduction=site_reduction,
+                        species_reduction=species_reduction,
+                        device=device
+                    )
+                    loss.backward()
+                    return loss
+                opt.step(closure)
+                last_train_loss += closure().cpu().item()
             
-            loss = loss_fn(
-                y,
-                logit_psi=logit_psi,
-                logit_d=logit_d,
-                visit_site_idxs=visit_site_idxs,
-                site_reduction=site_reduction,
-                species_reduction=species_reduction,
-            )
-
-            if not torch.isfinite(loss):
-                raise ValueError(f"Non-finite loss encountered: {loss.item()}")
-
-            loss.backward()
-            opt_psi.step()
-            opt_d.step()
-            current_loss.append(loss.detach().cpu().item())
+            else:
+                opt_psi.zero_grad()
+                opt_d.zero_grad()
+                loss = forward_path_one_batch(
+                    batch=batch,
+                    model=model,
+                    loss_fn=loss_fn,
+                    site_reduction=site_reduction,
+                    species_reduction=species_reduction,
+                    device=device
+                )
+                loss.backward()
+                opt_psi.step()
+                opt_d.step()
+                last_train_loss += loss.cpu().item()
         
-        last_loss = torch.tensor(current_loss).sum()
-        train_loss_history.append(float(last_loss))
+        train_loss_history.append(float(last_train_loss))
+        
+        if data.val_loader is not None:
+            last_val_loss = 0.0
+            with torch.no_grad():
+                for batch in data.val_loader:
+                    val_loss = forward_path_one_batch(
+                        batch=batch,
+                        model=model,
+                        loss_fn=loss_fn,
+                        site_reduction=site_reduction,
+                        species_reduction=species_reduction,
+                        device=device
+                    )
+                    last_val_loss += val_loss.cpu().item()
+            val_loss_history.append(float(last_val_loss))
 
-    print("  -> fitting done")
-    final = last_loss if last_loss is not None else torch.tensor(float("nan"))
+        pbar.set_postfix({
+            "train_loss": last_train_loss,
+            "val_loss": last_val_loss if data.val_loader is not None else "N/A"
+        })
+        pbar.update(1)
+    
+    loss_history = {"train_loss": train_loss_history}
+    if len(val_loss_history) > 0:
+        loss_history["val_loss"] = val_loss_history
+    
+    print(f"SGD-like fitting finished after {n_epochs} epochs with final train loss {last_train_loss:.4f}" + 
+          (f" and final val loss {last_val_loss:.4f}" if data.val_loader is not None else ""))
 
     return FitResult(
-        final_train_loss=float(final.cpu().item()), 
+        final_train_loss=last_train_loss,  
         n_epochs=epoch + 1,
         converged=True,
-        loss_history={"train_loss": train_loss_history},
+        loss_history=loss_history,
         lr_psi=lr_psi,
         optimizer_psi=optimizer_psi_cls.__name__,
         lr_d=lr_d,

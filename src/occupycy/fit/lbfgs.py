@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Callable, Optional
 
 import torch
+from tqdm import tqdm
 
 from .result import FitResult
 from occupycy.data import OccuData
@@ -34,22 +35,16 @@ def fit_lbfgs_full_batch(
       - model.forward_logits(X_psi=..., X_d=...) returns (logit_psi, logit_d)
       - logit_psi shape: (n_sites, n_species)
       - logit_d shape: (n_visits, n_species)
-
-    Requirements on the data:
-      - y: (n_visits, n_species)
-      - visit_site_idxs: (n_visits,)
-      - X_psi optional: (n_sites, n_cov_psi)
-      - X_d optional: (n_visits, n_cov_d)
     """
 
     if device is None:
         device = next(model.psi_model.parameters()).device
-    data = data.to(device=device)
+    data.to(device=device)
 
     y = data.y
-    visit_site_idxs = data.visit_site_idxs
+    indices_visit_site = data.indices_visit_site
 
-    if visit_site_idxs.numel() == 0:
+    if indices_visit_site.numel() == 0:
         raise ValueError("Cannot fit with zero visits.")
 
     X_psi = data.X_psi
@@ -76,9 +71,10 @@ def fit_lbfgs_full_batch(
     n_iter = 0
     last_loss = None
     train_loss_history = []
+    pbar = tqdm(total=max_iter, desc="LBFGS iterations", unit="iter")
 
     def closure():
-        nonlocal n_iter, last_loss
+        nonlocal n_iter, last_loss, train_loss_history, pbar
         # opt_psi.zero_grad(set_to_none=True)
         # opt_d.zero_grad(set_to_none=True)
         opt.zero_grad(set_to_none=True)
@@ -110,21 +106,28 @@ def fit_lbfgs_full_batch(
             y,
             logit_psi=logit_psi,
             logit_d=logit_d,
-            visit_site_idxs=visit_site_idxs,
+            indices_visit_site=indices_visit_site,
             site_reduction=site_reduction,
             species_reduction=species_reduction,
         )
+        
         if not torch.isfinite(loss):
             raise ValueError(f"Non-finite loss encountered: {loss.item()}")
         loss.backward()
         last_loss = loss.detach()
         n_iter += 1
         train_loss_history.append(float(last_loss.cpu().item()))
+
+        pbar.set_postfix({"train_loss": last_loss.cpu().item()})
+        pbar.update(1)
+
         return loss
 
     # loss = opt_psi.step(closure)
     # opt_d.step(closure)
     loss = opt.step(closure)
+
+    print(f"LBFGS finished after {n_iter} iterations with final train loss {last_loss.cpu().item():.4f}")
 
     final = last_loss if last_loss is not None else loss.detach()
 

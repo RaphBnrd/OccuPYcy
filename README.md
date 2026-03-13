@@ -29,8 +29,8 @@ uv run pytest -q
 - [x] Model with MLP + Linear
 - [ ] Models with qualitative variables
 ### Automation of training
-- [ ] Validation for sgd like fit
-- [ ] Early stoppintg for sgd like fit
+- [x] Validation for sgd like fit
+- [ ] Early stopping for sgd like fit
 - [ ] LR scheduler for sgd like fit
 - [ ] Cross-validation for hyper parameter tuning
 ### Penalisation
@@ -43,7 +43,7 @@ uv run pytest -q
 ### Further features
 - [ ] Allow user-defined split
 ### Cleaning
-- [ ] Delete matplotlib dependency
+- [ ] Delete dependencies: matplotlib, ipykernel
 ### Documentation
 - [ ] Docstrings for all functions and classes
 - [ ] Full documentation

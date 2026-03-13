@@ -2,6 +2,7 @@ import torch
 
 import matplotlib.pyplot as plt
 import polars as pl
+from copy import deepcopy
 
 from occupycy.data.core import OccuData
 from occupycy.fit import fit_lbfgs_full_batch, fit_sgd_like
@@ -32,14 +33,14 @@ def simulate_linear(
     # axes[1].hist(X_psi[:, 0].cpu(), bins=30, edgecolor='k')
     # axes[1].set_xlabel("Covariate for occupancy (X_psi[:, 0])")
     # axes[1].set_ylabel("Frequency")
-    visit_site_idxs = torch.arange(n_sites).repeat_interleave(n_visits_per_site)  # shape: (n_visits,)
+    indices_visit_site = torch.arange(n_sites).repeat_interleave(n_visits_per_site)  # shape: (n_visits,)
     # Filter out sites with zero visits
     if n_total_visits_max is not None: # Randomly subsample visits to have at most n_total_visits_max
-        if visit_site_idxs.shape[0] > n_total_visits_max:
-            print(f"Subsampling from {visit_site_idxs.shape[0]} visits to {n_total_visits_max} visits.")
-            perm = torch.randperm(visit_site_idxs.shape[0], generator=g)
-            visit_site_idxs = visit_site_idxs[perm[:n_total_visits_max]] # shape: (n_visits_sub,)
-    n_visits_per_site = torch.bincount(visit_site_idxs, minlength=n_sites)  # shape: (n_sites,) (for each site, how many visits it has)
+        if indices_visit_site.shape[0] > n_total_visits_max:
+            print(f"Subsampling from {indices_visit_site.shape[0]} visits to {n_total_visits_max} visits.")
+            perm = torch.randperm(indices_visit_site.shape[0], generator=g)
+            indices_visit_site = indices_visit_site[perm[:n_total_visits_max]] # shape: (n_visits_sub,)
+    n_visits_per_site = torch.bincount(indices_visit_site, minlength=n_sites)  # shape: (n_sites,) (for each site, how many visits it has)
     # Reassign site indices to be consecutive after filtering
     map_sites_to_sub = {}
     curr_idx = 0
@@ -48,15 +49,15 @@ def simulate_linear(
             map_sites_to_sub[i] = curr_idx
             curr_idx += 1
     n_sites_sub = curr_idx
-    visit_site_idxs = torch.tensor([map_sites_to_sub[idx.item()] for idx in visit_site_idxs], dtype=torch.long)  # shape: (n_visits_sub,)
-    n_visits_sub = visit_site_idxs.shape[0]
+    indices_visit_site = torch.tensor([map_sites_to_sub[idx.item()] for idx in indices_visit_site], dtype=torch.long)  # shape: (n_visits_sub,)
+    n_visits_sub = indices_visit_site.shape[0]
     X_psi = X_psi[torch.tensor(list(map_sites_to_sub.keys()))]  # shape: (n_sites_sub, n_cov_psi)
 
     X_d = torch.randn(n_visits_sub, len(coefs_d[0]), generator=g)  # shape: (n_visits_sub, n_cov_d)
 
     psi = torch.sigmoid(intercept_psi + X_psi @ coefs_psi.T) # shape: (n_sites_sub, n_species)
     z = torch.bernoulli(psi, generator=g)  # shape: (n_sites_sub, n_species)
-    z_for_visit = z[visit_site_idxs]  # shape: (n_visits_sub, n_species)
+    z_for_visit = z[indices_visit_site]  # shape: (n_visits_sub, n_species)
     
     d = torch.sigmoid(intercept_d + X_d @ coefs_d.T) # shape: (n_visits_sub, n_species)
     
@@ -100,7 +101,7 @@ def simulate_linear(
         axes[2, species_idx].set_title(f"d (species {species_idx})")
     fig.tight_layout()
 
-    return y.float(), visit_site_idxs.long(), X_psi.float(), X_d.float(), z.float()
+    return y.float(), indices_visit_site.long().tolist(), X_psi.float(), X_d.float(), z.float()
 
 
 def main():
@@ -112,27 +113,27 @@ def main():
     true_intercept_d = torch.tensor([-1.0, 0.5])                        # shape: (n_species,)
     true_coefs_d = torch.tensor([[0.0], [1.0]])                         # shape: (n_species, n_cov_d)
 
-    y, visit_site_idxs, X_psi, X_d, true_z = simulate_linear(
-        n_sites=1000, 
+    y, visit_site_ids, X_psi, X_d, true_z = simulate_linear(
+        n_sites=500, 
         n_total_visits_max=int(1e6),
         # f_effort=lambda x1: torch.exp(3*x1),
-        f_effort=lambda x1: 10 * x1 ** 2,
-        # f_effort=lambda x1: torch.ones_like(x1) * 10,
+        # f_effort=lambda x1: 10 * x1 ** 2,
+        f_effort=lambda x1: torch.ones_like(x1) * 50,
         intercept_psi=true_intercept_psi, 
         coefs_psi=true_coefs_psi, 
         intercept_d=true_intercept_d, 
         coefs_d=true_coefs_d, 
-        seed=None
+        seed=123
     )
 
     # --- Initialize results DataFrame ---
     
     true_logit_psi = true_intercept_psi + X_psi @ true_coefs_psi.T
     true_logit_d = true_intercept_d + X_d @ true_coefs_d.T
-    nll_true = nll_logits(y, visit_site_idxs=visit_site_idxs, logit_psi=true_logit_psi, logit_d=true_logit_d).item()
+    nll_true = nll_logits(y, indices_visit_site=torch.tensor(visit_site_ids), logit_psi=true_logit_psi, logit_d=true_logit_d).item()
     # true_psi = torch.sigmoid(true_logit_psi)
     # true_d = torch.sigmoid(true_logit_d)
-    # nll_true = nll_probs(y, visit_site_idxs=visit_site_idxs, psi=true_psi, d=true_d).item()
+    # nll_true = nll_probs(y, indices_visit_site=torch.tensor(visit_site_ids), psi=true_psi, d=true_d).item()
 
     def polar_res(*, fit_method, n_epochs, converged, final_train_loss, 
                   intercept_psi, coefs_psi, intercept_d, coefs_d):
@@ -162,12 +163,14 @@ def main():
     
     # --- Build OccuData ---
     
-    data = OccuData(y=y, visit_site_idxs=visit_site_idxs, X_psi=X_psi, X_d=X_d)
+    init_data = OccuData(y=y, visit_site_ids=visit_site_ids, X_psi=X_psi, X_d=X_d)
 
     plt.figure(figsize=(8, 5))
-    for fit_method in ["lbfgs_full_batch", "sgd", "adam"]:
+    for fit_method in ["lbfgs_full_batch", "lbfgs_FB", "lbfgs", "sgd", "adam"]:
         print(f"\n--- Fitting with {fit_method} ---")
         
+        data = deepcopy(init_data)
+
         # --- Define model ---
         
         model = LinearOccuModel(
@@ -184,17 +187,31 @@ def main():
                 device=torch.device("cpu"),
                 tolerance_grad=1e-8, tolerance_change=1e-10, history_size=100, line_search_fn="strong_wolfe"
             )
+        elif fit_method == "lbfgs_FB":
+            res = fit_sgd_like(
+                data, model, n_epochs=20, batch_size=data.n_sites, 
+                lr_psi=1e-1, lr_d=1e-1,
+                optimizer_psi_cls=torch.optim.LBFGS, optimizer_d_cls=torch.optim.LBFGS,
+                device=torch.device("cpu")
+            )
+        elif fit_method == "lbfgs":
+            res = fit_sgd_like(
+                data, model, n_epochs=20, batch_size=100, 
+                lr_psi=5e-2, lr_d=5e-2,
+                optimizer_psi_cls=torch.optim.LBFGS, optimizer_d_cls=torch.optim.LBFGS,
+                device=torch.device("cpu")
+            )
         elif fit_method == "sgd":
             res = fit_sgd_like(
-                data, model, n_epochs=100, batch_size=1000, 
+                data, model, n_epochs=100, batch_size=100, 
                 lr_psi=1e-3, lr_d=1e-3,
                 optimizer_psi_cls=torch.optim.SGD, optimizer_d_cls=torch.optim.SGD,
                 device=torch.device("cpu")
             )
         elif fit_method == "adam":
             res = fit_sgd_like(
-                data, model, n_epochs=100, batch_size=1000, 
-                lr_psi=1e-1, lr_d=1e-1,
+                data, model, n_epochs=100, batch_size=100, 
+                lr_psi=1e-2, lr_d=1e-2,
                 optimizer_psi_cls=torch.optim.Adam, optimizer_d_cls=torch.optim.Adam,
                 device=torch.device("cpu")
             )
