@@ -151,9 +151,9 @@ class OccuData():
         else:
             assert set(splitting.keys()) == {"train", "val", "test"}, "splitting keys must be 'train', 'val', 'test'"
             all_idxs = set(range(len(dataset)))
-            train_idxs = set(splitting["train"])
-            val_idxs = set(splitting["val"])
-            test_idxs = set(splitting["test"])
+            train_idxs = set(self.mapping_site_idx[id] for id in set(splitting["train"]))
+            val_idxs = set(self.mapping_site_idx[id] for id in set(splitting["val"]))
+            test_idxs = set(self.mapping_site_idx[id] for id in set(splitting["test"]))
             assert train_idxs.isdisjoint(val_idxs), "train and val indices must be disjoint"
             assert train_idxs.isdisjoint(test_idxs), "train and test indices must be disjoint"
             assert val_idxs.isdisjoint(test_idxs), "val and test indices must be disjoint"
@@ -189,69 +189,30 @@ class OccuData():
             collate_fn=collate_occu_sites, generator=generator
         ) if n_test else None
         
+    def filtered_sites(self, site_id_mask: list) -> "OccuData":
 
-    # def filtered_sites(self, site_id_mask: list) -> "OccuData":
+        if len(site_id_mask) != len(set(site_id_mask)):
+            print("Warning: site_mask contains duplicate indices. Duplicates are ignored.")
+            site_id_mask = list(set(site_id_mask))
+        
+        indices_site_mask = sorted([self.mapping_site_idx[site_id] for site_id in site_id_mask])
+        
+        X_psi_new = self.X_psi[indices_site_mask] if self.X_psi is not None else None
+        
+        mapping_idxs_to_ids = {idx: site_id for site_id, idx in self.mapping_site_idx.items()}
+        visit_site_ids = [mapping_idxs_to_ids[idx.item()] for idx in self.indices_visit_site]
 
-    #     if len(site_id_mask) != len(set(site_id_mask)):
-    #         print("Warning: site_mask contains duplicate indices. Duplicates are ignored.")
-    #         site_id_mask = list(set(site_id_mask))
-        
-    #     indices_site_mask = [self.mapping_site_idx[site_id] for site_id in site_id_mask]
-        
-    #     X_psi_new = self.X_psi[indices_site_mask] if self.X_psi is not None else None
-        
-    #     mapping_idxs_to_ids = {idx: site_id for site_id, idx in self.mapping_site_idx.items()}
-    #     visit_site_ids = torch.tensor(
-    #         [mapping_idxs_to_ids[idx] for idx in self.indices_visit_site],
-    #         dtype=torch.long
-    #     )
-
-    #     mask_v = torch.isin(self.visit_site_ids, torch.tensor(site_id_mask, dtype=torch.long)) # shape (n_visits,) with n_visits_sub True values corresponding to visits for the sites of interest
-    #     y_new = self.y[mask_v]
-    #     visit_site_ids_new = visit_site_ids[mask_v].tolist()
-    #     X_d_new = self.X_d[mask_v] if self.X_d is not None else None
+        mask_v = torch.isin(self.indices_visit_site, torch.tensor(indices_site_mask))
+        y_new = self.y[mask_v]
+        visit_site_ids_new = [visit_site_ids[i] for i in torch.where(mask_v)[0].tolist()]
+        X_d_new = self.X_d[mask_v] if self.X_d is not None else None
             
-    #     return OccuData(
-    #         y=y_new,
-    #         visit_site_ids=visit_site_ids_new,
-    #         X_psi=X_psi_new,
-    #         X_d=X_d_new
-    #     )
-
-    #     # site_mask = id_site_mask
-    #     # if set(site_mask) != set(range(len(site_mask))):
-    #     #     print("Warning: site_mask are not contiguous from 0 to len(site_mask)-1. A mapping will rename site indices to be contiguous.")
-
-    #     # # New indexing following site_mask order, but remapped to contiguous indices starting at 0
-    #     # mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(site_mask)}
-        
-    #     # # Indexing following site_mask order
-    #     # psi_new = self.X_psi[site_mask] if self.X_psi is not None else None 
-
-    #     # # visits_mask has no reordering: orders of visits is still consistent between y_new, X_d_new, and visit_site_idxs_new_wrong_ids
-    #     # visits_mask = torch.isin(self.visit_site_idxs, torch.tensor(site_mask))
-    #     # y_new = self.y[visits_mask]
-    #     # X_d_new = self.X_d[visits_mask] if self.X_d is not None else None
-    #     # visit_site_idxs_wrong_ids = self.visit_site_idxs[visits_mask] # still refers to ids, not to the remapped indices
-
-    #     # # Remap visit_site_idxs to new contiguous indexing
-    #     # visit_site_idxs_new = torch.tensor(
-    #     #     [mapping[old_idx.item()] for old_idx in visit_site_idxs_wrong_ids],
-    #     #     dtype=self.visit_site_idxs.dtype,
-    #     #     device=self.visit_site_idxs.device
-    #     # )
-
-    #     # if self.train_loader is not None or self.val_loader is not None or self.test_loader is not None:
-    #     #     print("Warning: filtered_sites does not update train/val/test loaders. Loaders in the returned OccuData will be set to None.")
-
-    #     # new_data = OccuData(
-    #     #     y=y_new,
-    #     #     visit_site_idxs=visit_site_idxs_new,
-    #     #     X_psi=psi_new,
-    #     #     X_d=X_d_new,
-    #     # )
-
-    #     # return new_data
+        return OccuData(
+            y=y_new,
+            visit_site_ids=visit_site_ids_new,
+            X_psi=X_psi_new,
+            X_d=X_d_new
+        )
 
 
 # -------------------------------------------------------------

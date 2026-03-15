@@ -24,7 +24,7 @@ uv run pytest -q
 - [x] Dataloaders
 - [x] Fit function for sgd like optimizers
 ### Data
-- [ ] Filtering OccuData object on a subset of sites
+- [x] Filtering OccuData object on a subset of sites
 ### Models
 - [x] Linear model
 - [x] MLP model
@@ -50,6 +50,10 @@ uv run pytest -q
 - [ ] Validation
 - [ ] Early stopping
 - [ ] LR scheduler
+- [ ] L2 penalisation on parameters
+- [ ] L1 penalisation on parameters
+- [ ] L2/L1 with naive estimator on logits
+- [ ] Checkpoints
 #### Models
 - [ ] Constant
 - [ ] Linear
