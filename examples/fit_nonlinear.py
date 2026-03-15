@@ -450,7 +450,7 @@ def main():
             }))
             
             # Plot loss
-            ax0.plot(res.loss_history["train_loss"], label=f"{model_name} | {fit_method}\n(final nll={res.final_train_loss:.2f})")
+            ax0.plot(res.history["train_loss"], label=f"{model_name} | {fit_method}\n(final nll={res.final_train_loss:.2f})")
             ax0.set_yscale("log")
             ax0.grid(True, which="both", ls="--")
             ax0.set_xlabel("Epoch")

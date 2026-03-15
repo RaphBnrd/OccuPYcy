@@ -135,7 +135,7 @@ def main():
             "d_hat": d_hat.tolist(),
         }))
         
-        plt.plot(res.loss_history["train_loss"], label=f"{fit_method}\n(final nll={res.final_train_loss:.2f})")
+        plt.plot(res.history["train_loss"], label=f"{fit_method}\n(final nll={res.final_train_loss:.2f})")
         # Plot horizontal lines for true and observed nll
         plt.yscale("log")
         plt.grid(True, which="both", ls="--")

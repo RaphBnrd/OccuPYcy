@@ -10,7 +10,7 @@ class FitResult:
 
     final_train_loss: Optional[float] = None
 
-    loss_history: Optional[dict[str, List[float]]] = None
+    history: Optional[dict[str, List[float]]] = None
 
     lr_psi: Optional[float] = None
     optimizer_psi: Optional[str] = None

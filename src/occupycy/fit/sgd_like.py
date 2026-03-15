@@ -71,6 +71,7 @@ def fit_sgd_like(
     test_fraction: float = 0.0,
     splitting: Optional[Dict[str, list]] = None,
     patience_early_stopping: Optional[int] = None,
+    patience_reduceLROnPlateau: Optional[int] = None,
 ) -> Tuple[FitResult, OccuData]:
     """
     Mini-batch SGD-style fitting for any OccuModel.
@@ -118,10 +119,25 @@ def fit_sgd_like(
             raise ValueError("Early stopping requires a validation set. Please provide a val_loader in the data or set patience_early_stopping to None.")
         early_stopper = EarlyStopper(patience=patience_early_stopping, min_delta=0.0)
 
+    # LR scheduler
+    if patience_reduceLROnPlateau is not None:
+        from torch.optim.lr_scheduler import ReduceLROnPlateau
+        kwargs_scheduler = {
+            "mode": "min",
+            "factor": 0.5,
+            "patience": patience_reduceLROnPlateau,
+            "min_lr": 1e-5
+        }
+        if optimizer_psi_cls == torch.optim.LBFGS:
+            scheduler = ReduceLROnPlateau(opt, **kwargs_scheduler)
+        else:
+            scheduler_state = ReduceLROnPlateau(opt_psi, **kwargs_scheduler)
+            scheduler_det = ReduceLROnPlateau(opt_d, **kwargs_scheduler)
 
     # Training loop
     train_loss_history = []
     val_loss_history = []
+    lr_psi_history, lr_d_history = [], []
 
     pbar = tqdm(range(n_epochs), desc="Epochs", unit="epoch")
     for epoch in range(n_epochs):
@@ -182,6 +198,9 @@ def fit_sgd_like(
                     last_val_loss += float(val_loss.cpu().item())
             val_loss_history.append(last_val_loss)
 
+        lr_psi_history.append(opt_psi.param_groups[0]['lr'] if optimizer_psi_cls != torch.optim.LBFGS else opt.param_groups[0]['lr'])
+        lr_d_history.append(opt_d.param_groups[0]['lr'] if optimizer_d_cls != torch.optim.LBFGS else opt.param_groups[0]['lr'])
+
         # Update progress bar
         pbar.set_postfix({
             "train_loss": last_train_loss,
@@ -194,10 +213,18 @@ def fit_sgd_like(
             if early_stopper.early_stop(last_val_loss):
                 print(f"Early stopping at epoch {epoch + 1}")
                 break
+        
+        # LR scheduler step
+        if patience_reduceLROnPlateau is not None:
+            if optimizer_psi_cls == torch.optim.LBFGS:
+                scheduler.step(last_val_loss)
+            else:
+                scheduler_state.step(last_val_loss)
+                scheduler_det.step(last_val_loss)
     
-    loss_history = {"train_loss": train_loss_history}
+    history = {"train_loss": train_loss_history, "lr_psi": lr_psi_history, "lr_d": lr_d_history}
     if len(val_loss_history) > 0:
-        loss_history["val_loss"] = val_loss_history
+        history["val_loss"] = val_loss_history
     
     print(f"SGD-like fitting finished after {n_epochs} epochs with final train loss {last_train_loss:.4f}" + 
           (f" and final val loss {last_val_loss:.4f}" if data.val_loader is not None else ""))
@@ -206,7 +233,7 @@ def fit_sgd_like(
         final_train_loss=last_train_loss,  
         n_epochs=epoch + 1,
         converged=True,
-        loss_history=loss_history,
+        history=history,
         lr_psi=lr_psi,
         optimizer_psi=optimizer_psi_cls.__name__,
         lr_d=lr_d,

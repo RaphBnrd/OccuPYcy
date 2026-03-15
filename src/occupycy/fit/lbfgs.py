@@ -136,7 +136,7 @@ def fit_lbfgs_full_batch(
         final_train_loss=float(final.cpu().item()), 
         n_epochs=n_iter, 
         converged=True,
-        loss_history={"train_loss": train_loss_history},
+        history={"train_loss": train_loss_history},
         # lr_psi=lr_psi,
         # lr_d=lr_d,
         lr_psi=lr,
