@@ -6,6 +6,7 @@ import torch
 from tqdm import tqdm
 
 from .result import FitResult
+from .early_stopper import EarlyStopper
 from occupycy.data import OccuData
 from occupycy.likelihood import nll_logits
 from occupycy.models import OccuModel
@@ -69,6 +70,7 @@ def fit_sgd_like(
     val_fraction: float = 0.0,
     test_fraction: float = 0.0,
     splitting: Optional[Dict[str, list]] = None,
+    patience_early_stopping: Optional[int] = None,
 ) -> Tuple[FitResult, OccuData]:
     """
     Mini-batch SGD-style fitting for any OccuModel.
@@ -109,13 +111,23 @@ def fit_sgd_like(
     else:
         opt_psi = optimizer_psi_cls(model.psi_model.parameters(), lr=lr_psi)
         opt_d = optimizer_d_cls(model.d_model.parameters(), lr=lr_d)
+    
+    # Early stopping
+    if patience_early_stopping is not None:
+        if data.val_loader is None:
+            raise ValueError("Early stopping requires a validation set. Please provide a val_loader in the data or set patience_early_stopping to None.")
+        early_stopper = EarlyStopper(patience=patience_early_stopping, min_delta=0.0)
 
+
+    # Training loop
     train_loss_history = []
     val_loss_history = []
 
     pbar = tqdm(range(n_epochs), desc="Epochs", unit="epoch")
     for epoch in range(n_epochs):
-        
+
+        # Training steps
+        model.train()
         last_train_loss = 0.0
         for batch in data.train_loader:
 
@@ -149,11 +161,13 @@ def fit_sgd_like(
                 loss.backward()
                 opt_psi.step()
                 opt_d.step()
-                last_train_loss += loss.cpu().item()
+                last_train_loss += float(loss.cpu().item())
+    
+        train_loss_history.append(last_train_loss)
         
-        train_loss_history.append(float(last_train_loss))
-        
+        # Validation steps
         if data.val_loader is not None:
+            model.eval()
             last_val_loss = 0.0
             with torch.no_grad():
                 for batch in data.val_loader:
@@ -165,14 +179,21 @@ def fit_sgd_like(
                         species_reduction=species_reduction,
                         device=device
                     )
-                    last_val_loss += val_loss.cpu().item()
-            val_loss_history.append(float(last_val_loss))
+                    last_val_loss += float(val_loss.cpu().item())
+            val_loss_history.append(last_val_loss)
 
+        # Update progress bar
         pbar.set_postfix({
             "train_loss": last_train_loss,
             "val_loss": last_val_loss if data.val_loader is not None else "N/A"
         })
         pbar.update(1)
+        
+        # Early stopping check
+        if patience_early_stopping is not None:
+            if early_stopper.early_stop(last_val_loss):
+                print(f"Early stopping at epoch {epoch + 1}")
+                break
     
     loss_history = {"train_loss": train_loss_history}
     if len(val_loss_history) > 0:

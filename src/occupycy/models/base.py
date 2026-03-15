@@ -52,3 +52,17 @@ class OccuModel(ABC):
         logit_psi = self.predict_logit_psi(X_psi)
         logit_d = self.predict_logit_d(X_d)
         return logit_psi, logit_d
+    
+    def eval(self):
+        """Set the model to evaluation mode."""
+        if self.psi_model is not None:
+            self.psi_model.eval()
+        if self.d_model is not None:
+            self.d_model.eval()
+    
+    def train(self):
+        """Set the model to training mode."""
+        if self.psi_model is not None:
+            self.psi_model.train()
+        if self.d_model is not None:
+            self.d_model.train()
