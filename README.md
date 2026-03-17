@@ -5,7 +5,7 @@ OccuPYcy is a package for <u>**occu**</u>pan<u>**cy**</u> modeling in <u>**PY**<
 
 ## Local developpement commands
 
-The following commnads will set up the development environment, install the package in editable mode, and run the tests (in quiet mode):
+The following commands will set up the development environment, install the package in editable mode, and run the tests (in quiet mode):
 
 ```bash
 uv venv
