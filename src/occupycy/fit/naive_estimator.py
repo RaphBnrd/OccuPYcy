@@ -16,6 +16,8 @@ def fit_naive_estimator(
     Naive estimator fitting for any OccuModel.
     """
 
+    print("Fitting naive estimator...")
+
     if device is None:
         device = data.y.device
 

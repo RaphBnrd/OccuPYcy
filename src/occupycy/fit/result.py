@@ -9,6 +9,7 @@ class FitResult:
     n_epochs: Optional[int] = None
 
     final_train_loss: Optional[float] = None
+    final_val_loss: Optional[float] = None
 
     history: Optional[dict[str, List[float]]] = None
 

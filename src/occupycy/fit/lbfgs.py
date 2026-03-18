@@ -17,8 +17,6 @@ def fit_lbfgs_full_batch(
     model: OccuModel,
     *,
     max_iter: int = 200,
-    # lr_psi: float = 1.0,
-    # lr_d: float = 1.0,
     lr: float = 1.0,
     tolerance_grad: float | None = None,
     tolerance_change: float | None = None,
@@ -34,6 +32,8 @@ def fit_lbfgs_full_batch(
 ) -> FitResult:
     """
     General full-batch LBFGS fitting for any OccuModel.
+
+    It modifies the model in-place.
 
     Requirements on the model:
       - model.forward_logits(X_psi=..., X_d=...) returns (logit_psi, logit_d)
@@ -65,8 +65,8 @@ def fit_lbfgs_full_batch(
             device=device
         ) # naive logits of shape: (n_species,)
     elif penalization_type in ["l2_logits", "l1_logits"]:
-        center_logit_psi = torch.zeros((model.psi_model.n_species,), device=device)
-        center_logit_d = torch.zeros((model.d_model.n_species,), device=device)
+        center_logit_psi = torch.zeros((model.n_species,), device=device)
+        center_logit_d = torch.zeros((model.n_species,), device=device)
     else:
         center_logit_psi, center_logit_d = None, None
 
@@ -91,10 +91,12 @@ def fit_lbfgs_full_batch(
     n_iter = 0
     last_loss = None
     train_loss_history = []
-    pbar = tqdm(total=max_iter, desc="LBFGS iterations", unit="iter")
+    pbar = None
 
     def closure():
         nonlocal n_iter, last_loss, train_loss_history, pbar
+        if n_iter == 0:
+            pbar = tqdm(total=max_iter, desc="LBFGS iterations", unit="iter")
         opt.zero_grad(set_to_none=True)
 
         logit_psi, logit_d = model.forward_logits(X_psi=X_psi, X_d=X_d)
@@ -167,6 +169,7 @@ def fit_lbfgs_full_batch(
     # LBFGS doesn't expose a robust convergence flag; keep best-effort.
     return FitResult(
         final_train_loss=float(final.cpu().item()), 
+        final_val_loss=None,
         n_epochs=n_iter, 
         converged=True,
         history={"train_loss": train_loss_history},

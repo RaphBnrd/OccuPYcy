@@ -15,7 +15,7 @@ from occupycy.likelihood.penalty import loss_penalty
 
 
 def forward_path_one_batch(
-    batch,
+    batch: OccuData,
     model: OccuModel,
     loss_fn: Callable[..., torch.Tensor],
     site_reduction: str,
@@ -80,6 +80,8 @@ def fit_sgd_like(
 ) -> Tuple[FitResult, OccuData]:
     """
     Mini-batch SGD-style fitting for any OccuModel.
+
+    It modifies the model in-place.
 
     Penalty implementations:
     [None, "l2_params", "l1_params", "l2_logits", "l1_logits", "l2_logits_naive", "l1_logits_naive"]
@@ -289,7 +291,8 @@ def fit_sgd_like(
           (f" and final val loss {last_val_loss:.4f}" if data.val_loader is not None else ""))
 
     return FitResult(
-        final_train_loss=last_train_loss,  
+        final_train_loss=last_train_loss,
+        final_val_loss=last_val_loss if data.val_loader is not None else None,
         n_epochs=epoch + 1,
         converged=True,
         history=history,
