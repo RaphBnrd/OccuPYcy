@@ -4,6 +4,7 @@ from typing import Callable, Optional, Dict, Tuple
 
 import torch
 from tqdm import tqdm
+from copy import deepcopy
 
 from .result import FitResult
 from .early_stopper import EarlyStopper
@@ -172,6 +173,11 @@ def fit_sgd_like(
     model.to(device=device)
     print(f"Starting SGD-like fitting on device {device}")
 
+    final_params_model_psi = deepcopy(model.psi_model.state_dict())
+    final_params_model_d = deepcopy(model.d_model.state_dict())
+    final_train_loss, final_val_loss = float('inf'), float('inf')
+    epoch_best_model = 0
+
     pbar = tqdm(range(n_epochs), desc="Epochs", unit="epoch")
     for epoch in range(n_epochs):
 
@@ -260,6 +266,20 @@ def fit_sgd_like(
         lr_psi_history.append(opt_psi.param_groups[0]['lr'] if optimizer_psi_cls != torch.optim.LBFGS else opt.param_groups[0]['lr'])
         lr_d_history.append(opt_d.param_groups[0]['lr'] if optimizer_d_cls != torch.optim.LBFGS else opt.param_groups[0]['lr'])
 
+        # Store best (eventually final) model and losses
+        if data.val_loader is not None:
+            if last_val_loss < final_val_loss:
+                final_train_loss = last_train_loss
+                final_val_loss = last_val_loss
+                final_params_model_psi = deepcopy(model.psi_model.state_dict())
+                final_params_model_d = deepcopy(model.d_model.state_dict())
+                epoch_best_model = epoch
+        else:
+            if last_train_loss < final_train_loss:
+                final_train_loss = last_train_loss
+                final_params_model_psi = deepcopy(model.psi_model.state_dict())
+                final_params_model_d = deepcopy(model.d_model.state_dict())
+                epoch_best_model = epoch
         # Update progress bar
         pbar.set_postfix({
             "train_loss": last_train_loss,
@@ -270,7 +290,7 @@ def fit_sgd_like(
         # Early stopping check
         if patience_early_stopping is not None:
             if early_stopper.early_stop(last_val_loss):
-                print(f"Early stopping at epoch {epoch + 1}")
+                print(f"Early stopping at epoch n°{epoch + 1}")
                 break
         
         # LR scheduler step
@@ -287,13 +307,19 @@ def fit_sgd_like(
     if len(val_loss_history) > 0:
         history["val_loss"] = val_loss_history
     
-    print(f"SGD-like fitting finished after {n_epochs} epochs with final train loss {last_train_loss:.4f}" + 
-          (f" and final val loss {last_val_loss:.4f}" if data.val_loader is not None else ""))
+    final_val_loss = last_val_loss if data.val_loader is not None else None
+    model.psi_model.load_state_dict(final_params_model_psi)
+    model.d_model.load_state_dict(final_params_model_d)
+    
+    print(f"SGD-like fitting finished after {n_epochs} epochs.\n"
+          f"Best model at epoch n°{epoch_best_model + 1} with final train loss {final_train_loss:.4f}" + 
+          (f" and final val loss {final_val_loss:.4f}" if data.val_loader is not None else ""))
 
     return FitResult(
-        final_train_loss=last_train_loss,
-        final_val_loss=last_val_loss if data.val_loader is not None else None,
+        final_train_loss=final_train_loss,
+        final_val_loss=final_val_loss,
         n_epochs=epoch + 1,
+        idx_epoch_best_model=epoch_best_model,
         converged=True,
         history=history,
         lr_psi=lr_psi,

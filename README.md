@@ -47,9 +47,8 @@ pytest -q
 - [x] Validation for sgd like fit
 - [x] Early stopping for sgd like fit
 - [x] LR scheduler for sgd like fit
-- [ ] Go back to best model checkpoint for sgd like fit (when early stopping for instance)
-- [ ] Checkpointing for sgd like fit
-- [ ] Cross-validation for hyper parameter tuning
+- [x] Go back to best model checkpoint for sgd like fit (when early stopping for instance)
+- [x] Cross-validation for hyper parameter tuning
 
 ### Penalisation
 - [x] L2/L1 penalisation on parameters
@@ -77,6 +76,7 @@ pytest -q
 - [x] Allow user-defined split
 - [ ] Filtering OccuData object on a subset of species
 - [ ] Models with qualitative variables
+- [ ] Save checkpoints along the training for sgd like fit
 
 ### Cleaning
 - [ ] Delete dependencies: matplotlib, ipykernel

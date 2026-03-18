@@ -10,6 +10,7 @@ class FitResult:
 
     final_train_loss: Optional[float] = None
     final_val_loss: Optional[float] = None
+    idx_epoch_best_model: Optional[int] = None
 
     history: Optional[dict[str, List[float]]] = None
 

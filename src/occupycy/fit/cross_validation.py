@@ -1,6 +1,6 @@
 from typing import Callable, Optional, Dict, Tuple, TypeVar
 
-import copy
+from copy import deepcopy
 import torch
 import polars as pl
 
@@ -174,7 +174,7 @@ def fit_lbfgs_full_batch_cv(
     
     for idx_combo, combo in enumerate(combinations):
         
-        this_model = copy.deepcopy(from_modelname_to_model[combo["model_name"]])
+        this_model = deepcopy(from_modelname_to_model[combo["model_name"]])
         
         if verbose:
             print(f"\n ==== Fitting n°{idx_combo+1}/{len(combinations)} ====")
@@ -232,7 +232,7 @@ def fit_lbfgs_full_batch_cv(
     best_model = all_fitted_models[best_idx]
 
     if verbose:
-        df_print = copy.deepcopy(df_results)
+        df_print = deepcopy(df_results)
         for col_func in ["loss_fn"]:
             df_print = df_print.with_columns(pl.Series(
                 col_func, [getattr(f, "__name__", str(f)) for f in df_results[col_func]]
@@ -317,7 +317,7 @@ def fit_sgd_like_cv(
     
     for idx_combo, combo in enumerate(combinations):
         
-        this_model = copy.deepcopy(from_modelname_to_model[combo["model_name"]])
+        this_model = deepcopy(from_modelname_to_model[combo["model_name"]])
         
         if verbose:
             print(f"\n ==== Fitting n°{idx_combo+1}/{len(combinations)} ====")
@@ -382,7 +382,7 @@ def fit_sgd_like_cv(
     best_model = all_fitted_models[best_idx]
 
     if verbose:
-        df_print = copy.deepcopy(df_results)
+        df_print = deepcopy(df_results)
         for col_func in ["loss_fn", "optimizer_psi_cls", "optimizer_d_cls"]:
             df_print = df_print.with_columns(pl.Series(
                 col_func, [getattr(f, "__name__", str(f)) for f in df_results[col_func]]
