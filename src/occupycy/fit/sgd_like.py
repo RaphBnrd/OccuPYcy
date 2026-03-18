@@ -10,6 +10,8 @@ from .early_stopper import EarlyStopper
 from occupycy.data import OccuData
 from occupycy.likelihood import nll_logits
 from occupycy.models import OccuModel
+from .naive_estimator import fit_naive_estimator
+from occupycy.likelihood.penalty import loss_penalty
 
 
 def forward_path_one_batch(
@@ -21,15 +23,15 @@ def forward_path_one_batch(
     device: torch.device
 ):
     batch.to(device=device)
-    y = batch.y
+    y = batch.y # shape: (n_visits, n_species)
     indices_visit_site = batch.indices_visit_site
-    X_psi = batch.X_psi
-    X_d = batch.X_d
+    X_psi = batch.X_psi # shape: (n_sites, n_cov_psi) or None
+    X_d = batch.X_d # shape: (n_visits, n_cov_d) or None
 
     logit_psi, logit_d = model.forward_logits(
         X_psi=X_psi,
         X_d=X_d,
-    )
+    ) # logit_psi shape: (n_sites, n_species), logit_d shape: (n_visits, n_species)
 
     # Broadcast if intercept-only
     if X_psi is None:
@@ -49,7 +51,7 @@ def forward_path_one_batch(
     if not torch.isfinite(loss):
         raise ValueError(f"Non-finite loss encountered: {loss.item()}")
     
-    return loss
+    return loss, logit_psi, logit_d
 
 
 def fit_sgd_like(
@@ -72,16 +74,19 @@ def fit_sgd_like(
     splitting: Optional[Dict[str, list]] = None,
     patience_early_stopping: Optional[int] = None,
     patience_reduceLROnPlateau: Optional[int] = None,
+    penalization_type: Optional[str] = None,
+    penalization_lambda_psi: Optional[float] = None,
+    penalization_lambda_d: Optional[float] = None
 ) -> Tuple[FitResult, OccuData]:
     """
     Mini-batch SGD-style fitting for any OccuModel.
+
+    Penalty implementations:
+    [None, "l2_params", "l1_params", "l2_logits", "l1_logits", "l2_logits_naive", "l1_logits_naive"]
     """
 
     if device is None:
         device = next(model.psi_model.parameters()).device
-
-    model.psi_model = model.psi_model.to(device)
-    model.d_model = model.d_model.to(device)
 
     # Build dataloader (sites batched)
     if data.train_loader is None:
@@ -99,6 +104,19 @@ def fit_sgd_like(
         if next(iter(data.train_loader)).n_sites != batch_size:
             print(f"Warning: provided dataloader has batch size {next(iter(data.train_loader)).n_sites}, which does not match the specified batch_size {batch_size}. Using the provided dataloader's batch size.")
 
+    # Penalization setup
+    if penalization_type in ["l2_logits_naive", "l1_logits_naive"]:
+        center_logit_psi, center_logit_d, _, _ = fit_naive_estimator(
+            data=data,
+            loss_fn=loss_fn,
+            device=device
+        ) # naive logits of shape: (n_species,)
+    elif penalization_type in ["l2_logits", "l1_logits"]:
+        center_logit_psi = torch.zeros((model.n_species,), device=device)
+        center_logit_d = torch.zeros((model.n_species,), device=device)
+    else:
+        center_logit_psi, center_logit_d = None, None
+    
     # Optimizer
     if optimizer_psi_cls == torch.optim.LBFGS or optimizer_d_cls == torch.optim.LBFGS:
         if optimizer_psi_cls != optimizer_d_cls:
@@ -110,9 +128,18 @@ def fit_sgd_like(
             lr=lr_psi, max_iter=1
         )
     else:
-        opt_psi = optimizer_psi_cls(model.psi_model.parameters(), lr=lr_psi)
-        opt_d = optimizer_d_cls(model.d_model.parameters(), lr=lr_d)
-    
+        # NB: L2 regularization is implemented as weight decay in the optimizer
+        opt_psi = optimizer_psi_cls(
+            model.psi_model.parameters(), 
+            lr=lr_psi, 
+            weight_decay=penalization_lambda_psi if penalization_type == "l2_params" else 0.0
+        )
+        opt_d = optimizer_d_cls(
+            model.d_model.parameters(), 
+            lr=lr_d, 
+            weight_decay=penalization_lambda_d if penalization_type == "l2_params" else 0.0
+        )
+
     # Early stopping
     if patience_early_stopping is not None:
         if data.val_loader is None:
@@ -139,6 +166,10 @@ def fit_sgd_like(
     val_loss_history = []
     lr_psi_history, lr_d_history = [], []
 
+    data.to(device=device)
+    model.to(device=device)
+    print(f"Starting SGD-like fitting on device {device}")
+
     pbar = tqdm(range(n_epochs), desc="Epochs", unit="epoch")
     for epoch in range(n_epochs):
 
@@ -150,7 +181,7 @@ def fit_sgd_like(
             if optimizer_psi_cls == torch.optim.LBFGS:
                 def closure():
                     opt.zero_grad()
-                    loss = forward_path_one_batch(
+                    nll, logit_psi, logit_d = forward_path_one_batch(
                         batch=batch,
                         model=model,
                         loss_fn=loss_fn,
@@ -158,6 +189,19 @@ def fit_sgd_like(
                         species_reduction=species_reduction,
                         device=device
                     )
+                    penalty = loss_penalty(
+                        penalization_type=penalization_type,
+                        penalization_lambda_psi=penalization_lambda_psi,
+                        penalization_lambda_d=penalization_lambda_d,
+                        model=model,
+                        logit_psi=logit_psi,
+                        logit_d=logit_d,
+                        center_logit_psi=center_logit_psi,
+                        center_logit_d=center_logit_d,
+                        site_reduction=site_reduction,
+                        species_reduction=species_reduction
+                    )
+                    loss = nll + penalty
                     loss.backward()
                     return loss
                 opt.step(closure)
@@ -166,7 +210,7 @@ def fit_sgd_like(
             else:
                 opt_psi.zero_grad()
                 opt_d.zero_grad()
-                loss = forward_path_one_batch(
+                nll, logit_psi, logit_d = forward_path_one_batch(
                     batch=batch,
                     model=model,
                     loss_fn=loss_fn,
@@ -174,6 +218,19 @@ def fit_sgd_like(
                     species_reduction=species_reduction,
                     device=device
                 )
+                penalty = loss_penalty(
+                    penalization_type=penalization_type if penalization_type != "l2_params" else None, # L2 on parameters is handled by weight decay in the optimizer
+                    penalization_lambda_psi=penalization_lambda_psi,
+                    penalization_lambda_d=penalization_lambda_d,
+                    model=model,
+                    logit_psi=logit_psi,
+                    logit_d=logit_d,
+                    center_logit_psi=center_logit_psi,
+                    center_logit_d=center_logit_d,
+                    site_reduction=site_reduction,
+                    species_reduction=species_reduction
+                )
+                loss = nll + penalty
                 loss.backward()
                 opt_psi.step()
                 opt_d.step()
@@ -187,7 +244,7 @@ def fit_sgd_like(
             last_val_loss = 0.0
             with torch.no_grad():
                 for batch in data.val_loader:
-                    val_loss = forward_path_one_batch(
+                    val_loss, _, _ = forward_path_one_batch(
                         batch=batch,
                         model=model,
                         loss_fn=loss_fn,
@@ -222,6 +279,8 @@ def fit_sgd_like(
                 scheduler_state.step(last_val_loss)
                 scheduler_det.step(last_val_loss)
     
+    pbar.close()
+
     history = {"train_loss": train_loss_history, "lr_psi": lr_psi_history, "lr_d": lr_d_history}
     if len(val_loss_history) > 0:
         history["val_loss"] = val_loss_history

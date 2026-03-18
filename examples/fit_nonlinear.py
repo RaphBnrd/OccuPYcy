@@ -220,6 +220,7 @@ def main():
     df_results = pl.DataFrame({
         "model": ['true'],
         "fit_method": ['true'],
+        "penalization": ['None'],
         "n_epochs": [0],
         "converged": [True],
         "final_train_loss": [nll_true]
@@ -232,30 +233,53 @@ def main():
     # --- Define models, learning rates and fitting methods ---
     
     all_models = {
-        # "linear_mlp-psi_16-d_16": {
+        "linear_mlp-psi_16-d_16": {
+            'model': LinearMLPOccuModel(
+                n_species=y.shape[1], 
+                n_cov_psi_linear=1, n_cov_psi_mlp=X_psi.shape[1]-1,
+                n_cov_d_linear=1, n_cov_d_mlp=X_d.shape[1]-1,
+                hidden_dims_psi=[16], hidden_dims_d=[16],
+                activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU,
+                dropout_psi=0.0, dropout_d=0.0
+            ), 
+            'methods': [
+                'adam',
+                'sgd',
+                'lbfgs_full_batch', 
+                'adam', 
+                'adam', 
+                # 'adam', 
+                # 'adam', 
+                'adam'#, 
+                # 'adam', 
+                # 'lbfgs_full_batch'
+            ],
+            'lrs': [1e-2, 5e-3] + [1e-2] * 8,
+            'penalty': [
+                (None, 0.0, 0.0), 
+                ("l2_params", 1e-4, 0.1), 
+                ("l2_params", 1e-4, 0.1), 
+                ("l2_params", 1e-4, 0.1), 
+                ("l1_params", 0.01, 0.01), 
+                # ("l2_logits", 0.1, 0.1),
+                # ("l1_logits", 0.1, 0.1),
+                ("l2_logits_naive", 0.01, 0.01)#,
+                # ("l1_logits_naive", 0.1, 0.1),
+                # ("l1_logits_naive", 0.1, 0.1)
+            ]
+        },
+        # "linear_mlp-psi_16-d_none": {
         #     'model': LinearMLPOccuModel(
         #         n_species=y.shape[1], 
-        #         n_cov_psi_linear=1, n_cov_psi_mlp=X_psi.shape[1]-1,
-        #         n_cov_d_linear=1, n_cov_d_mlp=X_d.shape[1]-1,
-        #         hidden_dims_psi=[16], hidden_dims_d=[16],
+        #         n_cov_psi_linear=1, n_cov_psi_mlp=1,
+        #         n_cov_d_linear=1, n_cov_d_mlp=0,
+        #         hidden_dims_psi=[16], hidden_dims_d=[],
         #         activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU,
         #         dropout_psi=0.0, dropout_d=0.0
         #     ), 
         #     'methods': ['adam'],
         #     'lrs': [1e-2]
         # },
-        "linear_mlp-psi_16-d_none": {
-            'model': LinearMLPOccuModel(
-                n_species=y.shape[1], 
-                n_cov_psi_linear=1, n_cov_psi_mlp=1,
-                n_cov_d_linear=1, n_cov_d_mlp=0,
-                hidden_dims_psi=[16], hidden_dims_d=[],
-                activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU,
-                dropout_psi=0.0, dropout_d=0.0
-            ), 
-            'methods': ['adam'],
-            'lrs': [1e-2]
-        },
         # "mlp-psi_64_32_16-d_64_32_16": {
         #     'model': MLPOccuModel(
         #         n_species=y.shape[1], n_cov_psi=X_psi.shape[1], n_cov_d=X_d.shape[1],
@@ -266,36 +290,37 @@ def main():
         #     'methods': ['adam'],
         #     'lrs': [1e-3]
         # },
-        "mlp-psi_16-d_16": {
-            'model': MLPOccuModel(
-                n_species=y.shape[1], n_cov_psi=X_psi.shape[1], n_cov_d=X_d.shape[1],
-                hidden_dims_psi=[16], hidden_dims_d=[16],
-                activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU,
-                dropout_psi=0.0, dropout_d=0.0
-            ), 
-            'methods': ['adam'],
-            'lrs': [3e-3]
-        },
-        "linear-psi-d (adam)": {
-            'model': MLPOccuModel(
-                n_species=y.shape[1], n_cov_psi=X_psi.shape[1], n_cov_d=X_d.shape[1],
-                hidden_dims_psi=[], hidden_dims_d=[],
-                activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU,
-                dropout_psi=0.0, dropout_d=0.0
-            ), 
-            'methods': ['adam'],
-            'lrs': [1e-2]
-        },
-        "linear-psi-d (lbfgs)": {
-            'model': MLPOccuModel(
-                n_species=y.shape[1], n_cov_psi=X_psi.shape[1], n_cov_d=X_d.shape[1],
-                hidden_dims_psi=[], hidden_dims_d=[],
-                activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU,
-                dropout_psi=0.0, dropout_d=0.0
-            ), 
-            'methods': ['lbfgs_full_batch'],
-            'lrs': [1e-4]
-        },
+        # "mlp-psi_16-d_16": {
+        #     'model': MLPOccuModel(
+        #         n_species=y.shape[1], n_cov_psi=X_psi.shape[1], n_cov_d=X_d.shape[1],
+        #         hidden_dims_psi=[16], hidden_dims_d=[16],
+        #         activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU,
+        #         dropout_psi=0.0, dropout_d=0.0
+        #     ), 
+        #     'methods': ['adam', 'adam'],
+        #     'lrs': [3e-3, 3e-3],
+        #     'penalty': [(None, 0.0, 0.0), ("l2_params", 0.1, 0.1)]
+        # },
+        # "linear-psi-d (adam)": {
+        #     'model': MLPOccuModel(
+        #         n_species=y.shape[1], n_cov_psi=X_psi.shape[1], n_cov_d=X_d.shape[1],
+        #         hidden_dims_psi=[], hidden_dims_d=[],
+        #         activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU,
+        #         dropout_psi=0.0, dropout_d=0.0
+        #     ), 
+        #     'methods': ['adam'],
+        #     'lrs': [1e-2]
+        # },
+        # "linear-psi-d (lbfgs)": {
+        #     'model': MLPOccuModel(
+        #         n_species=y.shape[1], n_cov_psi=X_psi.shape[1], n_cov_d=X_d.shape[1],
+        #         hidden_dims_psi=[], hidden_dims_d=[],
+        #         activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU,
+        #         dropout_psi=0.0, dropout_d=0.0
+        #     ), 
+        #     'methods': ['lbfgs_full_batch'],
+        #     'lrs': [1e-4]
+        # },
         # "constant-psi-d": {
         #     'model': MLPOccuModel(
         #         n_species=y.shape[1], n_cov_psi=0, n_cov_d=0,
@@ -307,6 +332,14 @@ def main():
         #     'lrs': [1e-3]
         # },
     }
+
+    # --- Fit models ---
+
+    from occupycy.fit.naive_estimator import fit_naive_estimator
+    center_logit_psi, center_logit_d, _, _ = fit_naive_estimator(data=data)
+    print("Naive estimators:")
+    print(f"  psi: {torch.sigmoid(center_logit_psi).cpu().numpy()}")
+    print(f"  d:   {torch.sigmoid(center_logit_d).cpu().numpy()}")
 
     # --- Prepare plots ---
 
@@ -350,7 +383,7 @@ def main():
             for i in range(n_species):
                 ax = axes_pred_psi[i]
                 order_points_psi = torch.argsort(x_psi[:, 0])
-                ax.plot(x_psi.cpu()[order_points_psi], tmp_true_logit_psi[:, i].cpu()[order_points_psi], 
+                ax.plot(x_psi.cpu()[order_points_psi], tmp_true_logit_psi[:, i][order_points_psi], 
                         'o-', alpha=0.1, label="true f_psi", color="black", markersize=2)
                 ax.set_xlabel("X_psi covariate")
                 ax.set_ylabel("logit_psi")
@@ -362,9 +395,9 @@ def main():
             contours_psi = []
             for i in range(n_species):
                 ax = axes_pred_psi[i, 0]
-                cf = ax.contourf(x_psi[:, :, 0].cpu(), x_psi[:, :, 1].cpu(), tmp_true_logit_psi[:, :, i].cpu(), levels=20, cmap="viridis")
+                cf = ax.contourf(x_psi[:, :, 0].cpu(), x_psi[:, :, 1].cpu(), tmp_true_logit_psi[:, :, i], levels=20, cmap="viridis")
                 contours_psi.append(cf)
-                # ax.scatter(x_psi[:, 0].cpu(), x_psi[:, 1].cpu(), c=tmp_true_logit_psi[:, i].cpu(), s=20, cmap="viridis", alpha=0.1)
+                # ax.scatter(x_psi[:, 0].cpu(), x_psi[:, 1].cpu(), c=tmp_true_logit_psi[:, i], s=20, cmap="viridis", alpha=0.1)
                 ax.set_xlabel("X_psi covariate 1")
                 ax.set_ylabel("X_psi covariate 2")
                 ax.set_title(f"true\nspecies {i})", fontsize=8)
@@ -379,7 +412,7 @@ def main():
             for i in range(n_species):
                 ax = axes_pred_d[i]
                 order_points_d = torch.argsort(x_d[:, 0])
-                ax.plot(x_d.cpu()[order_points_d], tmp_true_logit_d[:, i].cpu()[order_points_d], 
+                ax.plot(x_d.cpu()[order_points_d], tmp_true_logit_d[:, i][order_points_d], 
                         'o-', alpha=0.1, label="true f_d", color="black", markersize=2)
                 ax.set_xlabel("X_d covariate")
                 ax.set_ylabel("logit_d")
@@ -391,9 +424,9 @@ def main():
             contours_d = []
             for i in range(n_species):
                 ax = axes_pred_d[i, 0]
-                cf = ax.contourf(x_d[:, :, 0].cpu(), x_d[:, :, 1].cpu(), tmp_true_logit_d[:, :, i].cpu(), levels=20, cmap="viridis")
+                cf = ax.contourf(x_d[:, :, 0].cpu(), x_d[:, :, 1].cpu(), tmp_true_logit_d[:, :, i], levels=20, cmap="viridis")
                 contours_d.append(cf)
-                # ax.scatter(x_d[:, 0].cpu(), x_d[:, 1].cpu(), c=tmp_true_logit_d[:, i].cpu(), s=20, cmap="viridis", alpha=0.1)
+                # ax.scatter(x_d[:, 0].cpu(), x_d[:, 1].cpu(), c=tmp_true_logit_d[:, i], s=20, cmap="viridis", alpha=0.1)
                 ax.set_xlabel("X_d covariate 1")
                 ax.set_ylabel("X_d covariate 2")
                 ax.set_title(f"true\nspecies {i}", fontsize=8)
@@ -410,7 +443,19 @@ def main():
 
             model = copy.deepcopy(this_dict['model'])
 
-            print(f"> {fit_method}")
+            label = f"{model_name} | {fit_method}"
+
+            if 'penalty' in this_dict:
+                label += f"\npenalty={this_dict['penalty'][idx_meth]}"
+                print(f"> {fit_method} with penalty={this_dict['penalty'][idx_meth]}")
+                penalization_type = this_dict['penalty'][idx_meth][0]
+                penalization_lambda_psi = this_dict['penalty'][idx_meth][1]
+                penalization_lambda_d = this_dict['penalty'][idx_meth][2]
+            else:
+                print(f"> {fit_method}")
+                penalization_type = None
+                penalization_lambda_psi = 0.0
+                penalization_lambda_d = 0.0
         
             # --- Fit model ---
 
@@ -424,19 +469,37 @@ def main():
                     device=torch.device("cpu"),
                     tolerance_grad=1e-8, tolerance_change=1e-10, history_size=100, line_search_fn="strong_wolfe"
                 )
+            elif fit_method == "lbfgs":
+                res = fit_sgd_like(
+                    data, model, n_epochs=300, batch_size=data.n_sites, 
+                    lr_psi=this_dict['lrs'][idx_meth], lr_d=this_dict['lrs'][idx_meth],
+                    optimizer_psi_cls=torch.optim.LBFGS, optimizer_d_cls=torch.optim.LBFGS,
+                    device=torch.device("cpu"),
+                    penalization_type=penalization_type,
+                    penalization_lambda_psi=penalization_lambda_psi,
+                    penalization_lambda_d=penalization_lambda_d
+
+                )
             elif fit_method == "sgd":
                 res = fit_sgd_like(
                     data, model, n_epochs=300, batch_size=100, 
                     lr_psi=this_dict['lrs'][idx_meth], lr_d=this_dict['lrs'][idx_meth],
                     optimizer_psi_cls=torch.optim.SGD, optimizer_d_cls=torch.optim.SGD,
-                    device=torch.device("cpu")
+                    device=torch.device("cpu"),
+                    penalization_type=penalization_type,
+                    penalization_lambda_psi=penalization_lambda_psi,
+                    penalization_lambda_d=penalization_lambda_d
+
                 )
             elif fit_method == "adam":
                 res = fit_sgd_like(
                     data, model, n_epochs=300, batch_size=100, 
                     lr_psi=this_dict['lrs'][idx_meth], lr_d=this_dict['lrs'][idx_meth],
                     optimizer_psi_cls=torch.optim.Adam, optimizer_d_cls=torch.optim.Adam,
-                    device=torch.device("cpu")
+                    device=torch.device("cpu"),
+                    penalization_type=penalization_type,
+                    penalization_lambda_psi=penalization_lambda_psi,
+                    penalization_lambda_d=penalization_lambda_d
                 )
 
             # --- Store results ---
@@ -444,23 +507,24 @@ def main():
             df_results = df_results.vstack(pl.DataFrame({
                 "model": [model_name],
                 "fit_method": [fit_method],
+                "penalization": [str(this_dict['penalty'][idx_meth]) if 'penalty' in this_dict else 'None'],
                 "n_epochs": [res.n_epochs],
                 "converged": [res.converged],
                 "final_train_loss": [res.final_train_loss]
             }))
             
             # Plot loss
-            ax0.plot(res.history["train_loss"], label=f"{model_name} | {fit_method}\n(final nll={res.final_train_loss:.2f})")
+            ax0.plot(res.history["train_loss"], label=f"{label}\n(final nll={res.final_train_loss:.2f})")
             ax0.set_yscale("log")
             ax0.grid(True, which="both", ls="--")
             ax0.set_xlabel("Epoch")
             ax0.set_ylabel("Train Loss")
             # Plot predicted vs true logit_psi
             model.psi_model.eval()
-            logit_psi_hat = model.psi_model(X_psi).detach() # shape: (n_sites, n_species)
+            logit_psi_hat = model.psi_model(X_psi).detach().cpu() # shape: (n_sites, n_species)
             for i in range(n_species):
                 axes[i+1, 0].scatter(true_logit_psi[:, i].cpu(), logit_psi_hat[:, i].cpu(), 
-                                     s=3, alpha=0.1, label=f"{model_name} | {fit_method}")
+                                     s=3, alpha=0.1, label=label)
                 min_range = torch.max(torch.min(true_logit_psi[:, i]), torch.min(logit_psi_hat[:, i])).item()
                 max_range = torch.min(torch.max(true_logit_psi[:, i]), torch.max(logit_psi_hat[:, i])).item()
                 axes[i+1, 0].plot([min_range, max_range], [min_range, max_range], color="gray", linestyle="--")
@@ -470,10 +534,10 @@ def main():
                 axes[i+1, 0].grid(True)
             # Plot predicted vs true logit_d
             model.d_model.eval()
-            logit_d_hat = model.d_model(X_d).detach() # shape: (n_visits, n_species)
+            logit_d_hat = model.d_model(X_d).detach().cpu() # shape: (n_visits, n_species)
             for i in range(n_species):
                 axes[i+1, 1].scatter(true_logit_d[:, i].cpu(), logit_d_hat[:, i].cpu(), 
-                                     s=3, alpha=0.1, label=f"{model_name} | {fit_method}")
+                                     s=3, alpha=0.1, label=label)
                 min_range = torch.max(torch.min(true_logit_d[:, i]), torch.min(logit_d_hat[:, i])).item()
                 max_range = torch.min(torch.max(true_logit_d[:, i]), torch.max(logit_d_hat[:, i])).item()
                 axes[i+1, 1].plot([min_range, max_range], [min_range, max_range], color="gray", linestyle="--")
@@ -485,47 +549,47 @@ def main():
             # Plot predictions
             if n_cov_psi == 1:
                 with torch.no_grad():
-                    logit_psi_pred = model.psi_model(x_psi).cpu()
+                    logit_psi_pred = model.psi_model(x_psi).detach().cpu()
                 for i in range(n_species):
                     ax = axes_pred_psi[i]
-                    ax.plot(x_psi.cpu()[order_points_psi], logit_psi_pred[:, i].cpu()[order_points_psi], 
-                            'o-', alpha=0.1, label=f"{model_name} | {fit_method}", markersize=2)
+                    ax.plot(x_psi.cpu()[order_points_psi], logit_psi_pred[:, i][order_points_psi], 
+                            'o-', alpha=0.1, label=label, markersize=2)
             elif n_cov_psi == 2:
                 with torch.no_grad():
-                    logit_psi_pred = model.psi_model(x_psi.view(-1, n_cov_psi)).cpu().view(x_psi.shape[0], x_psi.shape[1], -1)
+                    logit_psi_pred = model.psi_model(x_psi.view(-1, n_cov_psi)).detach().cpu().view(x_psi.shape[0], x_psi.shape[1], -1)
                 overall_min_logit_psi = min(overall_min_logit_psi, logit_psi_pred.min().item())
                 overall_max_logit_psi = max(overall_max_logit_psi, logit_psi_pred.max().item())
                 for i in range(n_species):
                     ax = axes_pred_psi[i, idx_plot]
-                    cf = ax.contourf(x_psi[:, :, 0].cpu(), x_psi[:, :, 1].cpu(), logit_psi_pred[:, :, i].cpu(), levels=20, cmap="viridis")
+                    cf = ax.contourf(x_psi[:, :, 0].cpu(), x_psi[:, :, 1].cpu(), logit_psi_pred[:, :, i], levels=20, cmap="viridis")
                     contours_psi.append(cf)
-                    # ax.scatter(x_psi[:, 0].cpu(), x_psi[:, 1].cpu(), c=logit_psi_pred[:, i].cpu(), s=20, cmap="viridis", alpha=0.1)
+                    # ax.scatter(x_psi[:, 0].cpu(), x_psi[:, 1].cpu(), c=logit_psi_pred[:, i], s=20, cmap="viridis", alpha=0.1)
                     ax.set_xlabel("X_psi covariate 1")
                     ax.set_ylabel("X_psi covariate 2")
-                    ax.set_title(f"{model_name}\n{fit_method} | species {i}", fontsize=8)
+                    ax.set_title(f"{label}\nspecies {i}", fontsize=8)
                     ax.grid(True)
                     cbar = fig_pred_psi.colorbar(ax.collections[0], ax=ax, shrink=0.7)
                     cbar.ax.tick_params(labelsize=6)
             if n_cov_d == 1:
                 with torch.no_grad():
-                    logit_d_pred = model.d_model(x_d).cpu()
+                    logit_d_pred = model.d_model(x_d).detach().cpu()
                 for i in range(n_species):
                     ax = axes_pred_d[i]
-                    ax.plot(x_d.cpu()[order_points_d], logit_d_pred[:, i].cpu()[order_points_d],
-                            'o-', alpha=0.1, label=f"{model_name} | {fit_method}", markersize=2)
+                    ax.plot(x_d.cpu()[order_points_d], logit_d_pred[:, i][order_points_d],
+                            'o-', alpha=0.1, label=label, markersize=2)
             elif n_cov_d == 2:
                 with torch.no_grad():
-                    logit_d_pred = model.d_model(x_d.view(-1, n_cov_d)).cpu().view(x_d.shape[0], x_d.shape[1], -1)
+                    logit_d_pred = model.d_model(x_d.view(-1, n_cov_d)).detach().cpu().view(x_d.shape[0], x_d.shape[1], -1)
                 overall_min_logit_d = min(overall_min_logit_d, logit_d_pred.min().item())
                 overall_max_logit_d = max(overall_max_logit_d, logit_d_pred.max().item())
                 for i in range(n_species):
                     ax = axes_pred_d[i, idx_plot]
-                    cf = ax.contourf(x_d[:, :, 0].cpu(), x_d[:, :, 1].cpu(), logit_d_pred[:, :, i].cpu(), levels=20, cmap="viridis")
+                    cf = ax.contourf(x_d[:, :, 0].cpu(), x_d[:, :, 1].cpu(), logit_d_pred[:, :, i], levels=20, cmap="viridis")
                     contours_d.append(cf)
-                    # ax.scatter(x_d[:, 0].cpu(), x_d[:, 1].cpu(), c=logit_d_pred[:, i].cpu(), s=20, cmap="viridis", alpha=0.1)
+                    # ax.scatter(x_d[:, 0].cpu(), x_d[:, 1].cpu(), c=logit_d_pred[:, i], s=20, cmap="viridis", alpha=0.1)
                     ax.set_xlabel("X_d covariate 1")
                     ax.set_ylabel("X_d covariate 2")
-                    ax.set_title(f"{model_name}\n{fit_method} | species {i}", fontsize=8)
+                    ax.set_title(f"{label}\nspecies {i}", fontsize=8)
                     ax.grid(True)
                     cbar = fig_pred_d.colorbar(ax.collections[0], ax=ax, shrink=0.7)
                     cbar.ax.tick_params(labelsize=6)

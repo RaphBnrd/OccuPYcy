@@ -9,6 +9,7 @@ from .result import FitResult
 from occupycy.data import OccuData
 from occupycy.likelihood import nll_logits
 from occupycy.models import OccuModel
+from occupycy.likelihood.penalty import loss_penalty
 
 
 def fit_lbfgs_full_batch(
@@ -27,6 +28,9 @@ def fit_lbfgs_full_batch(
     species_reduction: str = "mean",
     loss_fn: Callable[..., torch.Tensor] = nll_logits,
     device: Optional[torch.device] = None,
+    penalization_type: Optional[str] = None,
+    penalization_lambda_psi: Optional[float] = None,
+    penalization_lambda_d: Optional[float] = None
 ) -> FitResult:
     """
     General full-batch LBFGS fitting for any OccuModel.
@@ -39,7 +43,9 @@ def fit_lbfgs_full_batch(
 
     if device is None:
         device = next(model.psi_model.parameters()).device
+    
     data.to(device=device)
+    model.to(device=device)
 
     y = data.y
     indices_visit_site = data.indices_visit_site
@@ -50,6 +56,21 @@ def fit_lbfgs_full_batch(
     X_psi = data.X_psi
     X_d = data.X_d
 
+    # Penalization setup
+    if penalization_type in ["l2_logits_naive", "l1_logits_naive"]:
+        from .naive_estimator import fit_naive_estimator
+        center_logit_psi, center_logit_d, _, _ = fit_naive_estimator(
+            data=data,
+            loss_fn=loss_fn,
+            device=device
+        ) # naive logits of shape: (n_species,)
+    elif penalization_type in ["l2_logits", "l1_logits"]:
+        center_logit_psi = torch.zeros((model.psi_model.n_species,), device=device)
+        center_logit_d = torch.zeros((model.d_model.n_species,), device=device)
+    else:
+        center_logit_psi, center_logit_d = None, None
+
+    # LBFGS optimizer setup
     lbfgs_kwargs = dict(max_iter=max_iter)
 
     if tolerance_grad is not None:
@@ -61,13 +82,12 @@ def fit_lbfgs_full_batch(
     if line_search_fn is not None:
         lbfgs_kwargs["line_search_fn"] = line_search_fn
 
-    # opt_psi = torch.optim.LBFGS(model.psi_model.parameters(), lr=lr_psi, **lbfgs_kwargs)
-    # opt_d = torch.optim.LBFGS(model.d_model.parameters(), lr=lr_d, **lbfgs_kwargs)
     opt = torch.optim.LBFGS(
         list(model.psi_model.parameters()) + list(model.d_model.parameters()),
         lr=lr, **lbfgs_kwargs
     )
 
+    # Closure function for LBFGS optimization
     n_iter = 0
     last_loss = None
     train_loss_history = []
@@ -75,8 +95,6 @@ def fit_lbfgs_full_batch(
 
     def closure():
         nonlocal n_iter, last_loss, train_loss_history, pbar
-        # opt_psi.zero_grad(set_to_none=True)
-        # opt_d.zero_grad(set_to_none=True)
         opt.zero_grad(set_to_none=True)
 
         logit_psi, logit_d = model.forward_logits(X_psi=X_psi, X_d=X_d)
@@ -102,7 +120,7 @@ def fit_lbfgs_full_batch(
         if logit_psi.shape[1] != y.shape[1] or logit_d.shape[1] != y.shape[1]:
             raise ValueError("Model species dimension must match y.shape[1].")
 
-        loss = loss_fn(
+        nll = loss_fn(
             y,
             logit_psi=logit_psi,
             logit_d=logit_d,
@@ -110,6 +128,20 @@ def fit_lbfgs_full_batch(
             site_reduction=site_reduction,
             species_reduction=species_reduction,
         )
+
+        penalty = loss_penalty(
+            penalization_type=penalization_type,
+            penalization_lambda_psi=penalization_lambda_psi,
+            penalization_lambda_d=penalization_lambda_d,
+            model=model,
+            logit_psi=logit_psi,
+            logit_d=logit_d,
+            center_logit_psi=center_logit_psi,
+            center_logit_d=center_logit_d,
+            site_reduction=site_reduction,
+            species_reduction=species_reduction
+        )
+        loss = nll + penalty
         
         if not torch.isfinite(loss):
             raise ValueError(f"Non-finite loss encountered: {loss.item()}")
@@ -123,9 +155,10 @@ def fit_lbfgs_full_batch(
 
         return loss
 
-    # loss = opt_psi.step(closure)
-    # opt_d.step(closure)
+    # Fit the model using LBFGS optimization
+    print(f"Starting LBFGS fitting on device {device}")
     loss = opt.step(closure)
+    pbar.close()
 
     print(f"LBFGS finished after {n_iter} iterations with final train loss {last_loss.cpu().item():.4f}")
 
@@ -137,8 +170,6 @@ def fit_lbfgs_full_batch(
         n_epochs=n_iter, 
         converged=True,
         history={"train_loss": train_loss_history},
-        # lr_psi=lr_psi,
-        # lr_d=lr_d,
         lr_psi=lr,
         lr_d=lr,
         optimizer_psi="LBFGS",

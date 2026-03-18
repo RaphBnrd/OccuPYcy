@@ -13,6 +13,16 @@ uv pip install -e ".[dev]"
 uv run pytest -q
 ```
 
+If you don't want to use uv, you can use the following commands:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e ".[dev]"
+pytest -q
+```
+
 ## TODO
 
 ### First minimal version
@@ -20,16 +30,19 @@ uv run pytest -q
 - [x] Data class
 - [x] Constant model
 - [x] Fit function for lbfgs
+
 ### SGD-like optimizers
 - [x] Dataloaders
 - [x] Fit function for sgd like optimizers
+
 ### Data
 - [x] Filtering OccuData object on a subset of sites
+
 ### Models
 - [x] Linear model
 - [x] MLP model
 - [x] Model with MLP + Linear
-- [ ] Models with qualitative variables
+
 ### Automation of training
 - [x] Validation for sgd like fit
 - [x] Early stopping for sgd like fit
@@ -37,10 +50,12 @@ uv run pytest -q
 - [ ] Go back to best model checkpoint for sgd like fit (when early stopping for instance)
 - [ ] Checkpointing for sgd like fit
 - [ ] Cross-validation for hyper parameter tuning
+
 ### Penalisation
-- [ ] L2 penalisation
-- [ ] L2 with naive estimator
-- [ ] L1 penalisation
+- [x] L2/L1 penalisation on parameters
+- [x] L2/L1 penalisation on logits
+- [x] L2/L1 penalisation on logits with naive estimator
+
 ### Remaining tests
 #### Data
 - [ ] Dataloaders
@@ -50,20 +65,22 @@ uv run pytest -q
 - [ ] Validation
 - [ ] Early stopping
 - [ ] LR scheduler
-- [ ] L2 penalisation on parameters
-- [ ] L1 penalisation on parameters
-- [ ] L2/L1 with naive estimator on logits
+- [ ] Penalizations
 - [ ] Checkpoints
 #### Models
 - [ ] Constant
 - [ ] Linear
 - [ ] MLP
 - [ ] Linear + MLP
-- [ ] Qualitative
+
 ### Further features
-- [ ] Allow user-defined split
+- [x] Allow user-defined split
+- [ ] Filtering OccuData object on a subset of species
+- [ ] Models with qualitative variables
+
 ### Cleaning
 - [ ] Delete dependencies: matplotlib, ipykernel
+
 ### Documentation
 - [ ] Docstrings for all functions and classes
 - [ ] Full documentation

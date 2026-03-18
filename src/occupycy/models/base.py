@@ -66,3 +66,11 @@ class OccuModel(ABC):
             self.psi_model.train()
         if self.d_model is not None:
             self.d_model.train()
+    
+    def to(self, *args, **kwargs):
+        """Move the model to the specified device/dtype."""
+        if self.psi_model is not None:
+            self.psi_model.to(*args, **kwargs)
+        if self.d_model is not None:
+            self.d_model.to(*args, **kwargs)
+        return self
