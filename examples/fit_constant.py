@@ -3,42 +3,40 @@ import torch
 import matplotlib.pyplot as plt
 import polars as pl
 
+from simulate_data import simulate_constant
+
 from occupycy.data.core import OccuData
 from occupycy.fit import fit_lbfgs_full_batch, fit_sgd_like
 from occupycy.likelihood import nll_probs, nll_logits
 from occupycy.models import ConstantOccuModel
 
 
-def simulate_constant(
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
+# device = torch.device("cpu")
+
+def main():
+
+    # -------------------------------------------------------------
+    # Simulate data
+    # -------------------------------------------------------------
+
+    y, visit_site_ids, true_psi, true_d, observed_psi, observed_d = simulate_constant(
         n_sites=400, 
         n_visits_per_site=25, 
         psi=torch.tensor([0.7, 0.5, 0.1, 0.05]),
         d=torch.tensor([0.01, 0.1, 0.9, 0.99]),
         seed=None
-    ):
-    g = torch.Generator().manual_seed(seed) if seed is not None else None
-    n_species = psi.shape[0]
-    z = torch.bernoulli(psi.expand(n_sites, n_species), generator=g)
-    indices_visit_site = torch.arange(n_sites).repeat_interleave(n_visits_per_site)
-    z_for_visit = z[indices_visit_site]
-    y = torch.bernoulli(d.expand(indices_visit_site.shape[0], n_species), generator=g) * z_for_visit
-
-    print("--- Simulated data summary ---")
-    print(f"  n_sites={n_sites}, n_visits_per_site={n_visits_per_site}, n_species={n_species}")
-    print(f"  true psi={psi}, true d={d}")
-    print(f"  observed psi (knowing true occupancy): {z.mean(dim=0)}")
-    print(f"  observed d (knowing true occupancy):   {y.sum(dim=0) / z_for_visit.sum(dim=0)}")
-
-    return y.float(), indices_visit_site.long().tolist(), psi, d, z.mean(dim=0), y.sum(dim=0) / z_for_visit.sum(dim=0)
+    )
 
 
-def main():
-
-    # --- Simulate data ---
-
-    y, visit_site_ids, true_psi, true_d, observed_psi, observed_d = simulate_constant()
-
-    # --- Initialize results DataFrame ---
+    # -------------------------------------------------------------
+    # Initialize results DataFrame
+    # -------------------------------------------------------------
 
     n_sites = len(set(visit_site_ids))
     n_visits = len(visit_site_ids)
@@ -75,52 +73,69 @@ def main():
     }).with_columns(
         pl.col("final_train_loss").cast(pl.Float64)
     )
+    
 
-    # --- Build OccuData ---
+    # -------------------------------------------------------------
+    # Build OccuData
+    # -------------------------------------------------------------
     
     data = OccuData(y=y, visit_site_ids=visit_site_ids)
 
+    
+    # -------------------------------------------------------------
+    # FITTING LOOP
+    # -------------------------------------------------------------
+
     plt.figure(figsize=(8, 5))
+
+    # Loop over different fitting methods
     for fit_method in ["lbfgs_full_batch", "lbfgs", "sgd", "adam"]:
+
         print(f"\n--- Fitting with {fit_method} ---")
         
-        # --- Define model ---
+        # * * * Define model * * *
         
         model = ConstantOccuModel(n_species=data.n_species)
     
-        # --- Fit model ---
+        # * * * Fit model * * *
 
         if fit_method == "lbfgs_full_batch":
+
             res = fit_lbfgs_full_batch(
                 data, model, max_iter=1000, 
-                # lr_psi=0.1, lr_d=0.1, 
                 lr=0.1,
-                device=torch.device("cpu"),
+                device=device,
                 tolerance_grad=1e-8, tolerance_change=1e-10, history_size=100, line_search_fn="strong_wolfe"
             )
+
         elif fit_method == "lbfgs":
+            
             res = fit_sgd_like(
                 data, model, n_epochs=50, batch_size=data.n_sites, 
                 lr_psi=0.1, lr_d=0.1,
                 optimizer_psi_cls=torch.optim.LBFGS, optimizer_d_cls=torch.optim.LBFGS,
-                device=torch.device("cpu")
-             )
+                device=device
+            )
+            
         elif fit_method == "sgd":
+            
             res = fit_sgd_like(
                 data, model, n_epochs=50, batch_size=100, 
                 lr_psi=2e-2, lr_d=2e-2,
                 optimizer_psi_cls=torch.optim.SGD, optimizer_d_cls=torch.optim.SGD,
-                device=torch.device("cpu")
+                device=device
             )
+
         elif fit_method == "adam":
+            
             res = fit_sgd_like(
                 data, model, n_epochs=50, batch_size=100, 
                 lr_psi=2e-1, lr_d=2e-1,
                 optimizer_psi_cls=torch.optim.Adam, optimizer_d_cls=torch.optim.Adam,
-                device=torch.device("cpu")
+                device=device
             )
 
-        # --- Store results ---
+        # * * * Store results * * *
 
         psi_hat = torch.sigmoid(model.psi_model.logit_species.detach())
         d_hat = torch.sigmoid(model.d_model.logit_species.detach())
@@ -144,7 +159,7 @@ def main():
     plt.axhline(nll_true, color="gray", linestyle="--", label=f"(true nll={nll_true:.2f})")
     plt.axhline(nll_observed, color="black", linestyle="--", label=f"(observed nll={nll_observed:.2f})")
 
-    # --- Show results ---
+    # * * * Show results * * *
 
     df_results = pl.DataFrame(all_results).pivot(
         index=["fit_method", "n_epochs", "converged", "final_train_loss"],

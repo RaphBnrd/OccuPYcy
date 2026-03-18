@@ -111,7 +111,9 @@ class OccuData():
         self.y = _to(self.y)
         self.X_psi = _to(self.X_psi)
         self.X_d = _to(self.X_d)
-    
+        if device is not None: # indices_visit_site type should remain long, so only move to device if device is specified, but don't change dtype
+            self.indices_visit_site = self.indices_visit_site.to(device=device)
+
     def build_dataloaders(
         self,
         *,

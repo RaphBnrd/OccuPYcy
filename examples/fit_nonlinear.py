@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import polars as pl
 import copy
 
+from simulate_data import simulate_non_linear
+from utils_plots import non_lin_initialize_plots, non_lin_plot_each_loop, non_lin_finalize_plots
+
 from occupycy.data import OccuData
 from occupycy.fit import fit_lbfgs_full_batch, fit_sgd_like
 from occupycy.likelihood import nll_probs, nll_logits
@@ -11,124 +14,24 @@ from occupycy.models import MLPOccuModel, LinearMLPOccuModel
 from occupycy.models.mlp import MLPBlock
 
 
-def simulate_non_linear(
-        n_sites=400, 
-        n_total_visits_max=None,
-        n_cov_psi=2,
-        n_cov_d=1,
-        f_effort=lambda x1: torch.exp(1.5*x1), 
-        f_psi=lambda X_psi: torch.sigmoid(
-            torch.tensor([-1.0, 0.5]) + X_psi @ torch.tensor([[2.0, -1.0], [-1.0, 1.0]]).T
-        ), # from X_psi of shape (n_sites, n_cov_psi) to psi of shape (n_sites, n_species)
-        f_d=lambda X_d: torch.sigmoid(
-            torch.tensor([-0.5, 1.0]) + X_d @ torch.tensor([[1.0], [-2.0]]).T
-        ), # from X_d of shape (n_visits, n_cov_d) to d of shape (n_visits, n_species)
-        seed=None,
-        plot_summary=True,
-        verbose=True
-    ):
-    g = torch.Generator().manual_seed(seed) if seed is not None else None
-
-    X_psi = torch.randn(n_sites, n_cov_psi, generator=g)  # shape: (n_sites, n_cov_psi)
-    
-    # Define the number of visits per site
-    n_visits_per_site = f_effort(X_psi[:, 0])  # shape: (n_sites,)
-    n_visits_per_site = n_visits_per_site.round().long().clamp(min=0)  # shape: (n_sites,)
-    indices_visit_site = torch.arange(n_sites).repeat_interleave(n_visits_per_site)  # shape: (n_visits,)
-    # Filter out sites with zero visits
-    if n_total_visits_max is not None: # Randomly subsample visits to have at most n_total_visits_max
-        if indices_visit_site.shape[0] > n_total_visits_max:
-            print(f"Subsampling from {indices_visit_site.shape[0]} visits to {n_total_visits_max} visits.")
-            perm = torch.randperm(indices_visit_site.shape[0], generator=g)
-            indices_visit_site = indices_visit_site[perm[:n_total_visits_max]] # shape: (n_visits_sub,)
-    n_visits_per_site = torch.bincount(indices_visit_site, minlength=n_sites)  # shape: (n_sites,) (for each site, how many visits it has)
-    # Reassign site indices to be consecutive after filtering
-    map_sites_to_sub = {}
-    curr_idx = 0
-    for i in range(n_sites):
-        if n_visits_per_site[i] > 0:
-            map_sites_to_sub[i] = curr_idx
-            curr_idx += 1
-    n_sites_sub = curr_idx
-    indices_visit_site = torch.tensor([map_sites_to_sub[idx.item()] for idx in indices_visit_site], dtype=torch.long)  # shape: (n_visits_sub,)
-    n_visits_sub = indices_visit_site.shape[0]
-    X_psi = X_psi[torch.tensor(list(map_sites_to_sub.keys()))]  # shape: (n_sites_sub, n_cov_psi)
-
-    X_d = torch.randn(n_visits_sub, n_cov_d, generator=g)  # shape: (n_visits_sub, n_cov_d)
-
-    psi = f_psi(X_psi)  # shape: (n_sites_sub, n_species)
-    z = torch.bernoulli(psi, generator=g)  # shape: (n_sites_sub, n_species)
-    z_for_visit = z[indices_visit_site]  # shape: (n_visits_sub, n_species)
-    
-    d = f_d(X_d)  # shape: (n_visits_sub, n_species)
-    
-    y = torch.bernoulli(d * z_for_visit, generator=g)  # shape: (n_visits_sub, n_species)
-
-    # Plot summary of simulated data
-    if verbose:
-        print("--- Simulated data summary ---")
-        print(f"  n_sites={n_sites_sub}")
-        print(f"  n_visits={n_visits_sub}")
-        print(f"  range of psi * d: {(psi[indices_visit_site] * d).min():3e} to { (psi[indices_visit_site] * d).max():3e}")
-        print(f"  observed average psi (knowing true occupancy): {z.mean(dim=0)}")
-        print(f"  observed average d (knowing true occupancy):   {y.sum(dim=0) / z_for_visit.sum(dim=0)}")
-
-    if plot_summary:
-        fig, axes = plt.subplots(psi.shape[1]+1, 3, figsize=(10, (psi.shape[1]+1)*2))
-        gs = fig.add_gridspec(psi.shape[1]+1, 3)
-        # Histogram of n_visits_per_site
-        ax0 = fig.add_subplot(gs[0, :])
-        logbins = torch.logspace(torch.log10(n_visits_per_site[n_visits_per_site>0].min()), torch.log10(n_visits_per_site.max()), 30)
-        ax0.hist(n_visits_per_site.cpu(), bins=logbins, edgecolor='k')
-        ax0.set_xscale("log")
-        # ax0.hist(n_visits_per_site.cpu(), bins=50, edgecolor='k')
-        ax0.set_xlabel("Number of visits per site")
-        ax0.set_ylabel("Frequency")
-        ax0.set_title(f"Distribution of visits per site ({(n_visits_per_site>0).sum()}/{n_sites} sites with >0 visits)")
-        ax0.grid(True)
-        ax0.set_yscale("log")
-        for i in range(3):
-            axes[0, i].axis('off')
-        # Histogram of psi
-        for species_idx in range(psi.shape[1]):
-            tmp = psi[:, species_idx]
-            logbins = torch.logspace(torch.log10(tmp.min()), torch.log10(tmp.max()), 30)
-            axes[species_idx+1, 0].hist(tmp.cpu(), bins=logbins, edgecolor='k')
-            axes[species_idx+1, 0].set_xlabel("Occupancy probability (psi)")
-            axes[species_idx+1, 0].set_ylabel("Frequency")
-            axes[species_idx+1, 0].grid(True)
-            axes[species_idx+1, 0].set_title(f"psi (species {species_idx})")
-            axes[species_idx+1, 0].set_xscale("log")
-        # Histogram of d
-        for species_idx in range(d.shape[1]):
-            tmp = d[:, species_idx]
-            logbins = torch.logspace(torch.log10(tmp.min()), torch.log10(tmp.max()), 30)
-            axes[species_idx+1, 1].hist(tmp.cpu(), bins=logbins, edgecolor='k')
-            axes[species_idx+1, 1].set_xlabel("Detection probability (d)")
-            axes[species_idx+1, 1].set_ylabel("Frequency")
-            axes[species_idx+1, 1].grid(True)
-            axes[species_idx+1, 1].set_title(f"d (species {species_idx})")
-            axes[species_idx+1, 1].set_xscale("log")
-        # Histogram of psi*d
-        for species_idx in range(psi.shape[1]):
-            tmp = psi[indices_visit_site, species_idx] * d[:, species_idx]
-            logbins = torch.logspace(torch.log10(tmp.min()), torch.log10(tmp.max()), 30)
-            axes[species_idx+1, 2].hist(tmp.cpu(), bins=logbins, edgecolor='k')
-            axes[species_idx+1, 2].set_xlabel("Effective detection probability (psi * d)")
-            axes[species_idx+1, 2].set_ylabel("Frequency")
-            axes[species_idx+1, 2].grid(True)
-            axes[species_idx+1, 2].set_title(f"psi*d (species {species_idx})")
-            axes[species_idx+1, 2].set_xscale("log")
-        fig.tight_layout()
-
-    return y.float(), indices_visit_site.long().tolist(), X_psi.float(), X_d.float(), z.float()
-
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
+# device = torch.device("cpu")
 
 def main():
 
-    # --- Simulate data ---
+    # -------------------------------------------------------------
+    # Simulate data
+    # -------------------------------------------------------------
+
+    # * * * Models for PSI * * *
 
     n_cov_psi = 2
+
     # def true_f_psi(X_psi):
     #     psi = torch.sigmoid(
     #         torch.tensor([0.0, -1.0]) # shape: (n_species,) intercept
@@ -163,7 +66,11 @@ def main():
         logit2 = logit2.clamp(torch.logit(torch.tensor(eps)), torch.logit(torch.tensor(1-eps)))
         return torch.sigmoid(logit1 + logit2)
     
+
+    # * * * Models for D * * *
+
     n_cov_d = 1
+    
     def true_f_d(X_d):
         d = torch.sigmoid(
             torch.tensor([-1.0, 0.5]) 
@@ -195,6 +102,9 @@ def main():
     #     logit2 = logit2.clamp(torch.logit(torch.tensor(eps)), torch.logit(torch.tensor(1-eps)))
     #     return torch.sigmoid(logit1 + logit2)
 
+    
+    # * * * Simulate data * * *
+
     y, visit_site_ids, X_psi, X_d, true_z = simulate_non_linear(
         n_sites=1000, 
         n_total_visits_max=int(1e5),
@@ -210,8 +120,10 @@ def main():
         verbose=True
     )
 
-    # --- Initialize results DataFrame ---
-    
+    # -------------------------------------------------------------
+    # Initialize results DataFrame
+    # -------------------------------------------------------------
+
     eps = 1e-8
     true_logit_psi = torch.logit(true_f_psi(X_psi).clamp(eps, 1-eps))
     true_logit_d = torch.logit(true_f_d(X_d).clamp(eps, 1-eps))
@@ -226,11 +138,15 @@ def main():
         "final_train_loss": [nll_true]
     })
     
-    # --- Build OccuData ---
+    # -------------------------------------------------------------
+    # Build OccuData
+    # -------------------------------------------------------------
     
     data = OccuData(y=y, visit_site_ids=visit_site_ids, X_psi=X_psi, X_d=X_d)
 
-    # --- Define models, learning rates and fitting methods ---
+    # -------------------------------------------------------------
+    # Define models, learning rates and fitting methods
+    # -------------------------------------------------------------
     
     all_models = {
         "linear_mlp-psi_16-d_16": {
@@ -333,7 +249,12 @@ def main():
         # },
     }
 
-    # --- Fit models ---
+
+    # -------------------------------------------------------------
+    # Prepare fitting loop
+    # -------------------------------------------------------------
+        
+    # Compute naive estimators (just curiosity check)
 
     from occupycy.fit.naive_estimator import fit_naive_estimator
     center_logit_psi, center_logit_d, _, _ = fit_naive_estimator(data=data)
@@ -341,110 +262,36 @@ def main():
     print(f"  psi: {torch.sigmoid(center_logit_psi).cpu().numpy()}")
     print(f"  d:   {torch.sigmoid(center_logit_d).cpu().numpy()}")
 
-    # --- Prepare plots ---
+    # Prepare plots
 
-    n_species = y.shape[1]
-    fig, axes = plt.subplots(n_species+1, 2, figsize=(8, 2.5 * (n_species+1)))
-    gs = fig.add_gridspec(n_species+1, 2)
-    axes[0, 0].axis('off')
-    axes[0, 1].axis('off')
-    ax0 = fig.add_subplot(gs[0, :])
-
-    if n_cov_psi == 1:
-        # x_psi = torch.linspace(X_psi[:, 0].min(), X_psi[:, 0].max(), 100).unsqueeze(1)  # shape: (100, 1)
-        x_psi = X_psi  # shape: (n_sites_sub, 1)
-        n_plots_psi = 1
-    elif n_cov_psi == 2:
-        x_psi = torch.stack(torch.meshgrid(
-            torch.linspace(X_psi[:, 0].min(), X_psi[:, 0].max(), 20),
-            torch.linspace(X_psi[:, 1].min(), X_psi[:, 1].max(), 20),
-            indexing="ij"
-        ), dim=-1) # shape: (20, 20, n_cov_psi)
-        # x_psi = X_psi  # shape: (n_sites_sub, 2)
-        n_plots_psi = sum([len(mod['methods']) for mod in all_models.values()]) + 1
-    if n_cov_d == 1:
-        # x_d = torch.linspace(X_d[:, 0].min(), X_d[:, 0].max(), 100).unsqueeze(1)  # shape: (100, 1)
-        x_d = X_d  # shape: (n_visits_sub, 1)
-        n_plots_d = 1
-    elif n_cov_d == 2:
-        x_d = torch.stack(torch.meshgrid(
-            torch.linspace(X_d[:, 0].min(), X_d[:, 0].max(), 20),
-            torch.linspace(X_d[:, 1].min(), X_d[:, 1].max(), 20),
-            indexing="ij"
-        ), dim=-1) # shape: (20, 20, n_cov_d)
-        # x_d = X_d  # shape: (n_visits_sub, 2)
-        n_plots_d = sum([len(mod['methods']) for mod in all_models.values()]) + 1
+    fig, axes, ax0, fig_pred_psi, axes_pred_psi, fig_pred_d, axes_pred_d, \
+        x_psi, x_d, order_points_psi, order_points_d, contours_psi, contours_d, \
+        overall_min_logit_psi, overall_max_logit_psi, overall_min_logit_d, overall_max_logit_d = \
+        non_lin_initialize_plots(
+            y=y, X_psi=X_psi, X_d=X_d,
+            n_cov_psi=n_cov_psi, n_cov_d=n_cov_d, true_f_psi=true_f_psi, true_f_d=true_f_d,
+            all_models=all_models
+        )
     
-    if n_cov_psi in [1, 2]:
-        fig_pred_psi, axes_pred_psi = plt.subplots(n_species, n_plots_psi, figsize=(max(2.5 * n_plots_psi, 6), 3 * n_species))
-        fig_pred_psi.suptitle("logit_psi", fontsize=16)
-        tmp_true_logit_psi = torch.logit(true_f_psi(x_psi)).cpu() # shape: (100, n_species) if n_cov_psi==1 else (20, 20, n_species)
-        if n_cov_psi == 1:
-            for i in range(n_species):
-                ax = axes_pred_psi[i]
-                order_points_psi = torch.argsort(x_psi[:, 0])
-                ax.plot(x_psi.cpu()[order_points_psi], tmp_true_logit_psi[:, i][order_points_psi], 
-                        'o-', alpha=0.1, label="true f_psi", color="black", markersize=2)
-                ax.set_xlabel("X_psi covariate")
-                ax.set_ylabel("logit_psi")
-                ax.set_title(f"species {i}")
-                ax.grid(True)
-        else:
-            overall_min_logit_psi = tmp_true_logit_psi.min().item()
-            overall_max_logit_psi = tmp_true_logit_psi.max().item()
-            contours_psi = []
-            for i in range(n_species):
-                ax = axes_pred_psi[i, 0]
-                cf = ax.contourf(x_psi[:, :, 0].cpu(), x_psi[:, :, 1].cpu(), tmp_true_logit_psi[:, :, i], levels=20, cmap="viridis")
-                contours_psi.append(cf)
-                # ax.scatter(x_psi[:, 0].cpu(), x_psi[:, 1].cpu(), c=tmp_true_logit_psi[:, i], s=20, cmap="viridis", alpha=0.1)
-                ax.set_xlabel("X_psi covariate 1")
-                ax.set_ylabel("X_psi covariate 2")
-                ax.set_title(f"true\nspecies {i})", fontsize=8)
-                ax.grid(True)
-                cbar = fig_pred_psi.colorbar(ax.collections[0], ax=ax, shrink=0.7)
-                cbar.ax.tick_params(labelsize=6)
-    if n_cov_d in [1, 2]:
-        fig_pred_d, axes_pred_d = plt.subplots(n_species, n_plots_d, figsize=(max(2.5 * n_plots_d, 6), 3 * n_species))
-        fig_pred_d.suptitle("logit_d", fontsize=16)
-        tmp_true_logit_d = torch.logit(true_f_d(x_d)).cpu() # shape: (100, n_species) if n_cov_d==1 else (20, 20, n_species)
-        if n_cov_d == 1:
-            for i in range(n_species):
-                ax = axes_pred_d[i]
-                order_points_d = torch.argsort(x_d[:, 0])
-                ax.plot(x_d.cpu()[order_points_d], tmp_true_logit_d[:, i][order_points_d], 
-                        'o-', alpha=0.1, label="true f_d", color="black", markersize=2)
-                ax.set_xlabel("X_d covariate")
-                ax.set_ylabel("logit_d")
-                ax.set_title(f"species {i}")
-                ax.grid(True)
-        else:
-            overall_min_logit_d = tmp_true_logit_d.min().item()
-            overall_max_logit_d = tmp_true_logit_d.max().item()
-            contours_d = []
-            for i in range(n_species):
-                ax = axes_pred_d[i, 0]
-                cf = ax.contourf(x_d[:, :, 0].cpu(), x_d[:, :, 1].cpu(), tmp_true_logit_d[:, :, i], levels=20, cmap="viridis")
-                contours_d.append(cf)
-                # ax.scatter(x_d[:, 0].cpu(), x_d[:, 1].cpu(), c=tmp_true_logit_d[:, i], s=20, cmap="viridis", alpha=0.1)
-                ax.set_xlabel("X_d covariate 1")
-                ax.set_ylabel("X_d covariate 2")
-                ax.set_title(f"true\nspecies {i}", fontsize=8)
-                ax.grid(True)
-                cbar = fig_pred_d.colorbar(ax.collections[0], ax=ax, shrink=0.7)
-                cbar.ax.tick_params(labelsize=6)
     idx_plot = 0
 
-    for model_name, this_dict in all_models.items():
+
+    # -------------------------------------------------------------
+    # FITTING LOOP
+    # -------------------------------------------------------------
+
+    for model_name, this_dict in all_models.items(): # Loop over models
+
         print(f"\n=== Fitting {model_name} =================================")
 
-        for idx_meth, fit_method in enumerate(this_dict['methods']):
+        for idx_meth, fit_method in enumerate(this_dict['methods']): # Loop over fitting methods for this model
+            
             idx_plot += 1
+            label = f"{model_name} | {fit_method}"
 
             model = copy.deepcopy(this_dict['model'])
 
-            label = f"{model_name} | {fit_method}"
-
+            # In case penalty is not specified for this method, we set it to None with lambda=0 (i.e. no penalization)
             if 'penalty' in this_dict:
                 label += f"\npenalty={this_dict['penalty'][idx_meth]}"
                 print(f"> {fit_method} with penalty={this_dict['penalty'][idx_meth]}")
@@ -457,9 +304,10 @@ def main():
                 penalization_lambda_psi = 0.0
                 penalization_lambda_d = 0.0
         
-            # --- Fit model ---
+            # * * * Fit model * * *
 
             if fit_method == "lbfgs_full_batch":
+
                 if isinstance(model.psi_model, MLPBlock) or isinstance(model.d_model, MLPBlock):
                     print("Skipping lbfgs_full_batch for mlp model.")
                     continue
@@ -469,7 +317,9 @@ def main():
                     device=torch.device("cpu"),
                     tolerance_grad=1e-8, tolerance_change=1e-10, history_size=100, line_search_fn="strong_wolfe"
                 )
+
             elif fit_method == "lbfgs":
+                
                 res = fit_sgd_like(
                     data, model, n_epochs=300, batch_size=data.n_sites, 
                     lr_psi=this_dict['lrs'][idx_meth], lr_d=this_dict['lrs'][idx_meth],
@@ -478,9 +328,10 @@ def main():
                     penalization_type=penalization_type,
                     penalization_lambda_psi=penalization_lambda_psi,
                     penalization_lambda_d=penalization_lambda_d
-
                 )
+
             elif fit_method == "sgd":
+                
                 res = fit_sgd_like(
                     data, model, n_epochs=300, batch_size=100, 
                     lr_psi=this_dict['lrs'][idx_meth], lr_d=this_dict['lrs'][idx_meth],
@@ -489,9 +340,10 @@ def main():
                     penalization_type=penalization_type,
                     penalization_lambda_psi=penalization_lambda_psi,
                     penalization_lambda_d=penalization_lambda_d
-
                 )
+
             elif fit_method == "adam":
+
                 res = fit_sgd_like(
                     data, model, n_epochs=300, batch_size=100, 
                     lr_psi=this_dict['lrs'][idx_meth], lr_d=this_dict['lrs'][idx_meth],
@@ -502,7 +354,7 @@ def main():
                     penalization_lambda_d=penalization_lambda_d
                 )
 
-            # --- Store results ---
+            # * * * Store results * * *
 
             df_results = df_results.vstack(pl.DataFrame({
                 "model": [model_name],
@@ -513,114 +365,26 @@ def main():
                 "final_train_loss": [res.final_train_loss]
             }))
             
-            # Plot loss
-            ax0.plot(res.history["train_loss"], label=f"{label}\n(final nll={res.final_train_loss:.2f})")
-            ax0.set_yscale("log")
-            ax0.grid(True, which="both", ls="--")
-            ax0.set_xlabel("Epoch")
-            ax0.set_ylabel("Train Loss")
-            # Plot predicted vs true logit_psi
-            model.psi_model.eval()
-            logit_psi_hat = model.psi_model(X_psi).detach().cpu() # shape: (n_sites, n_species)
-            for i in range(n_species):
-                axes[i+1, 0].scatter(true_logit_psi[:, i].cpu(), logit_psi_hat[:, i].cpu(), 
-                                     s=3, alpha=0.1, label=label)
-                min_range = torch.max(torch.min(true_logit_psi[:, i]), torch.min(logit_psi_hat[:, i])).item()
-                max_range = torch.min(torch.max(true_logit_psi[:, i]), torch.max(logit_psi_hat[:, i])).item()
-                axes[i+1, 0].plot([min_range, max_range], [min_range, max_range], color="gray", linestyle="--")
-                axes[i+1, 0].set_xlabel("True logit_psi")
-                axes[i+1, 0].set_ylabel("Predicted logit_psi")
-                axes[i+1, 0].set_title(f"species {i}")
-                axes[i+1, 0].grid(True)
-            # Plot predicted vs true logit_d
-            model.d_model.eval()
-            logit_d_hat = model.d_model(X_d).detach().cpu() # shape: (n_visits, n_species)
-            for i in range(n_species):
-                axes[i+1, 1].scatter(true_logit_d[:, i].cpu(), logit_d_hat[:, i].cpu(), 
-                                     s=3, alpha=0.1, label=label)
-                min_range = torch.max(torch.min(true_logit_d[:, i]), torch.min(logit_d_hat[:, i])).item()
-                max_range = torch.min(torch.max(true_logit_d[:, i]), torch.max(logit_d_hat[:, i])).item()
-                axes[i+1, 1].plot([min_range, max_range], [min_range, max_range], color="gray", linestyle="--")
-                axes[i+1, 1].set_xlabel("True logit_d")
-                axes[i+1, 1].set_ylabel("Predicted logit_d")
-                axes[i+1, 1].set_title(f"species {i}")
-                axes[i+1, 1].grid(True)
-        
-            # Plot predictions
-            if n_cov_psi == 1:
-                with torch.no_grad():
-                    logit_psi_pred = model.psi_model(x_psi).detach().cpu()
-                for i in range(n_species):
-                    ax = axes_pred_psi[i]
-                    ax.plot(x_psi.cpu()[order_points_psi], logit_psi_pred[:, i][order_points_psi], 
-                            'o-', alpha=0.1, label=label, markersize=2)
-            elif n_cov_psi == 2:
-                with torch.no_grad():
-                    logit_psi_pred = model.psi_model(x_psi.view(-1, n_cov_psi)).detach().cpu().view(x_psi.shape[0], x_psi.shape[1], -1)
-                overall_min_logit_psi = min(overall_min_logit_psi, logit_psi_pred.min().item())
-                overall_max_logit_psi = max(overall_max_logit_psi, logit_psi_pred.max().item())
-                for i in range(n_species):
-                    ax = axes_pred_psi[i, idx_plot]
-                    cf = ax.contourf(x_psi[:, :, 0].cpu(), x_psi[:, :, 1].cpu(), logit_psi_pred[:, :, i], levels=20, cmap="viridis")
-                    contours_psi.append(cf)
-                    # ax.scatter(x_psi[:, 0].cpu(), x_psi[:, 1].cpu(), c=logit_psi_pred[:, i], s=20, cmap="viridis", alpha=0.1)
-                    ax.set_xlabel("X_psi covariate 1")
-                    ax.set_ylabel("X_psi covariate 2")
-                    ax.set_title(f"{label}\nspecies {i}", fontsize=8)
-                    ax.grid(True)
-                    cbar = fig_pred_psi.colorbar(ax.collections[0], ax=ax, shrink=0.7)
-                    cbar.ax.tick_params(labelsize=6)
-            if n_cov_d == 1:
-                with torch.no_grad():
-                    logit_d_pred = model.d_model(x_d).detach().cpu()
-                for i in range(n_species):
-                    ax = axes_pred_d[i]
-                    ax.plot(x_d.cpu()[order_points_d], logit_d_pred[:, i][order_points_d],
-                            'o-', alpha=0.1, label=label, markersize=2)
-            elif n_cov_d == 2:
-                with torch.no_grad():
-                    logit_d_pred = model.d_model(x_d.view(-1, n_cov_d)).detach().cpu().view(x_d.shape[0], x_d.shape[1], -1)
-                overall_min_logit_d = min(overall_min_logit_d, logit_d_pred.min().item())
-                overall_max_logit_d = max(overall_max_logit_d, logit_d_pred.max().item())
-                for i in range(n_species):
-                    ax = axes_pred_d[i, idx_plot]
-                    cf = ax.contourf(x_d[:, :, 0].cpu(), x_d[:, :, 1].cpu(), logit_d_pred[:, :, i], levels=20, cmap="viridis")
-                    contours_d.append(cf)
-                    # ax.scatter(x_d[:, 0].cpu(), x_d[:, 1].cpu(), c=logit_d_pred[:, i], s=20, cmap="viridis", alpha=0.1)
-                    ax.set_xlabel("X_d covariate 1")
-                    ax.set_ylabel("X_d covariate 2")
-                    ax.set_title(f"{label}\nspecies {i}", fontsize=8)
-                    ax.grid(True)
-                    cbar = fig_pred_d.colorbar(ax.collections[0], ax=ax, shrink=0.7)
-                    cbar.ax.tick_params(labelsize=6)
+            non_lin_plot_each_loop(
+                res=res, model=model, label=label, idx_plot=idx_plot,
+                axes=axes, ax0=ax0, fig_pred_psi=fig_pred_psi, axes_pred_psi=axes_pred_psi, fig_pred_d=fig_pred_d, 
+                axes_pred_d=axes_pred_d, contours_psi=contours_psi, contours_d=contours_d,
+                y=y, X_psi=X_psi, X_d=X_d, x_psi=x_psi, x_d=x_d, n_cov_psi=n_cov_psi, n_cov_d=n_cov_d, 
+                true_logit_psi=true_logit_psi, true_logit_d=true_logit_d,
+                order_points_psi=order_points_psi, order_points_d=order_points_d,
+                overall_min_logit_psi=overall_min_logit_psi, overall_max_logit_psi=overall_max_logit_psi, 
+                overall_min_logit_d=overall_min_logit_d, overall_max_logit_d=overall_max_logit_d
+            )
 
-    ax0.axhline(nll_true, color="gray", linestyle="--", label=f"(true nll={nll_true:.2f})")
-    ax0.set_title("Fitting constant OccuModel")
-    ax0.legend(fontsize=5)
-    for i in range(n_species):
-        axes[i+1, 0].legend(fontsize=5)
-        axes[i+1, 1].legend(fontsize=5)
-    fig.tight_layout()
+    non_lin_finalize_plots(
+        n_species=y.shape[1], fig=fig, axes=axes, ax0=ax0, fig_pred_psi=fig_pred_psi, axes_pred_psi=axes_pred_psi, 
+        fig_pred_d=fig_pred_d, axes_pred_d=axes_pred_d, contours_psi=contours_psi, contours_d=contours_d,
+        n_cov_psi=n_cov_psi, n_cov_d=n_cov_d, nll_true=nll_true,
+        overall_min_logit_psi=overall_min_logit_psi, overall_max_logit_psi=overall_max_logit_psi, 
+        overall_min_logit_d=overall_min_logit_d, overall_max_logit_d=overall_max_logit_d
+    )
 
-    if n_cov_psi == 1:
-        for i in range(n_species):
-            axes_pred_psi[i].legend(fontsize=5)
-    elif n_cov_psi == 2:
-        for cf in contours_psi:
-            cf.set_clim(overall_min_logit_psi, overall_max_logit_psi)
-    if n_cov_psi in [1, 2]:
-        fig_pred_psi.tight_layout()
-
-    if n_cov_d == 1:
-        for i in range(n_species):
-            axes_pred_d[i].legend(fontsize=5)
-    elif n_cov_d == 2:
-        for cf in contours_d:
-            cf.set_clim(overall_min_logit_d, overall_max_logit_d)
-    if n_cov_d in [1, 2]:
-        fig_pred_d.tight_layout()
-
-    # --- Show results ---
+    # * * * Show results * * *
 
     with pl.Config(tbl_rows=-1, tbl_cols=-1, float_precision=4):
         # Sorted by final_train_loss
