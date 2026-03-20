@@ -19,20 +19,6 @@ class ConstantOccuModel(OccuModel):
         self.psi_model = ConstantBlock(n_species)
         self.d_model = ConstantBlock(n_species)
 
-    def predict_logit_psi(self, X_psi: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        If X_psi is provided, only its first dim is used to infer n_sites_sub.
-        If X_psi is None, user must rely on trainer to know n_sites and use broadcasting after call.
-        """
-        return self.psi_model(X_psi)
-
-    def predict_logit_d(self, X_d: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        If X_d is provided, only its first dim is used to infer n_visits_sub.
-        If X_d is None, user must rely on trainer to know n_visits and use broadcasting after call.
-        """
-        return self.d_model(X_d)
-
     def initialize_rough_estimate(self, data: "OccuData") -> None:
         """
         Initialize the constant parameters to the rough estimates.

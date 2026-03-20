@@ -57,12 +57,6 @@ class MLPOccuModel(OccuModel):
                 activation_fn=activation_fn_d, dropout=dropout_d
             )
 
-    def predict_logit_psi(self, X_psi: Optional[torch.Tensor]) -> torch.Tensor:
-        return self.psi_model(X_psi)
-
-    def predict_logit_d(self, X_d: Optional[torch.Tensor]) -> torch.Tensor:
-        return self.d_model(X_d)
-
 class MLPBlock(nn.Module):
     """
     Block of MLP layers.
