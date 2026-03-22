@@ -31,12 +31,12 @@ def main():
     true_intercept_d = torch.tensor([-1.0, 0.5])                        # shape: (n_species,)
     true_coefs_d = torch.tensor([[0.0], [1.0]])                         # shape: (n_species, n_cov_d)
 
-    y, visit_site_ids, X_psi, X_d, true_z = simulate_linear(
+    y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z = simulate_linear(
         n_sites=500, 
         n_total_visits_max=int(1e6),
         # f_effort=lambda x1: torch.exp(3*x1),
-        # f_effort=lambda x1: 10 * x1 ** 2,
-        f_effort=lambda x1: torch.ones_like(x1) * 50,
+        f_effort=lambda x1: 10 * x1 ** 2,
+        # f_effort=lambda x1: torch.ones_like(x1) * 50,
         intercept_psi=true_intercept_psi, 
         coefs_psi=true_coefs_psi, 
         intercept_d=true_intercept_d, 
@@ -87,7 +87,13 @@ def main():
     # Build OccuData
     # -------------------------------------------------------------
     
-    init_data = OccuData(y=y, visit_site_ids=visit_site_ids, X_psi=X_psi, X_d=X_d)
+    init_data = OccuData(
+        y=y, 
+        visit_site_ids=visit_site_ids, 
+        X_psi=X_psi, 
+        X_d=X_d, 
+        site_ids_in_X_psi=site_ids_in_X_psi
+    )
 
     
     # -------------------------------------------------------------

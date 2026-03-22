@@ -8,14 +8,21 @@ from occupycy.data import OccuData
 def _valid_payload():
     y = [[0.0, 1.0], [1.0, 0.0], [0.0, 0.0]] # shape (3 visits, 2 species)
     visit_site_ids = ["A", "A", "B"] # shape (3 visits,)
+    site_ids_in_X_psi = ["A", "B"] # shape (2 sites,)
     X_psi = [[1.0], [2.0]] # shape (2 sites, 1 cov_psi)
     X_d = [[10.0, 11.0], [12.0, 13.0], [14.0, 15.0]] # shape (3 visits, 2 cov_d)
-    return y, visit_site_ids, X_psi, X_d
+    return y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d
 
 
 def test_occudata_coerces_to_tensors_and_properties_are_correct():
-    y, visit_site_ids, X_psi, X_d = _valid_payload()
-    data = OccuData(y=y, visit_site_ids=visit_site_ids, X_psi=X_psi, X_d=X_d)
+    y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d = _valid_payload()
+    data = OccuData(
+        y=y, 
+        visit_site_ids=visit_site_ids, 
+        X_psi=X_psi, 
+        X_d=X_d,
+        site_ids_in_X_psi=site_ids_in_X_psi
+    )
 
     assert isinstance(data.y, torch.Tensor)
     assert isinstance(data.indices_visit_site, torch.Tensor)
@@ -59,22 +66,23 @@ def test_raises_if_x_d_first_dim_mismatch():
 def test_raises_if_x_psi_not_2d():
     y = [[0.0], [1.0]]
     with pytest.raises(ValueError, match="X_psi must be 2D"):
-        OccuData(y=y, visit_site_ids=[0, 1], X_psi=[1.0, 2.0])
+        OccuData(y=y, visit_site_ids=[0, 1], X_psi=[1.0, 2.0], site_ids_in_X_psi=[0, 1])
 
 
 def test_raises_if_x_psi_rows_less_than_unique_sites():
     y = [[0.0], [1.0], [0.0]]
     with pytest.raises(ValueError, match="X_psi first dim"):
-        OccuData(y=y, visit_site_ids=[0, 1, 2], X_psi=[[1.0], [2.0]])
+        OccuData(y=y, visit_site_ids=[0, 1, 2], X_psi=[[1.0], [2.0]], site_ids_in_X_psi=[0, 1, 2])
 
 
 def test_to_with_dtype_changes_float_tensors_but_preserves_visit_site_integer_dtype():
-    y, visit_site_ids, X_psi, X_d = _valid_payload()
+    y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d = _valid_payload()
     data = OccuData(
         y=torch.tensor(y, dtype=torch.float64),
         visit_site_ids=visit_site_ids,
         X_psi=torch.tensor(X_psi, dtype=torch.float64),
         X_d=torch.tensor(X_d, dtype=torch.float64),
+        site_ids_in_X_psi=site_ids_in_X_psi
     )
 
     data.to(dtype=torch.float32)
@@ -98,12 +106,13 @@ def test_to_handles_optional_covariates_as_none():
     assert data.indices_visit_site.dtype == torch.int64
 
 def test_to_returns_new_object():
-    y, visit_site_ids, X_psi, X_d = _valid_payload()
+    y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d = _valid_payload()
     data = OccuData(
         y=torch.tensor(y, dtype=torch.float64),
         visit_site_ids=visit_site_ids,
         X_psi=torch.tensor(X_psi, dtype=torch.float64),
-        X_d=torch.tensor(X_d, dtype=torch.float64)
+        X_d=torch.tensor(X_d, dtype=torch.float64),
+        site_ids_in_X_psi=site_ids_in_X_psi
     )
 
     initial = deepcopy(data)
@@ -114,8 +123,14 @@ def test_to_returns_new_object():
     assert initial.y.dtype != data.y.dtype
 
 def test_train_dataloader_returns_occudata_batches():
-    y, visit_site_ids, X_psi, X_d = _valid_payload()
-    data = OccuData(y=y, visit_site_ids=visit_site_ids, X_psi=X_psi, X_d=X_d)
+    y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d = _valid_payload()
+    data = OccuData(
+        y=y, 
+        visit_site_ids=visit_site_ids, 
+        X_psi=X_psi, 
+        X_d=X_d, 
+        site_ids_in_X_psi=site_ids_in_X_psi
+    )
 
     data.build_dataloaders(batch_size=2)
 
@@ -126,8 +141,14 @@ def test_train_dataloader_returns_occudata_batches():
     assert batch.indices_visit_site.ndim == 1
     
 def test_collate_rebuilds_visit_site_ids_within_batch():
-    y, visit_site_ids, X_psi, X_d = _valid_payload()
-    data = OccuData(y=y, visit_site_ids=visit_site_ids, X_psi=X_psi, X_d=X_d)
+    y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d = _valid_payload()
+    data = OccuData(
+        y=y,
+        visit_site_ids=visit_site_ids,
+        X_psi=X_psi,
+        X_d=X_d,
+        site_ids_in_X_psi=site_ids_in_X_psi
+    )
 
     data.build_dataloaders(batch_size=2)
 
@@ -136,8 +157,14 @@ def test_collate_rebuilds_visit_site_ids_within_batch():
     assert set(batch.mapping_site_idx.keys()).issubset(set(visit_site_ids))
 
 def test_build_dataloaders_split_sizes():
-    y, visit_site_ids, X_psi, X_d = _valid_payload()
-    data = OccuData(y=y, visit_site_ids=visit_site_ids, X_psi=X_psi, X_d=X_d)
+    y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d = _valid_payload()
+    data = OccuData(
+        y=y,
+        visit_site_ids=visit_site_ids,
+        X_psi=X_psi,
+        X_d=X_d,
+        site_ids_in_X_psi=site_ids_in_X_psi
+    )
 
     data.build_dataloaders(val_fraction=0.5, test_fraction=0.0)
 

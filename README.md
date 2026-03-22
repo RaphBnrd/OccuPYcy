@@ -74,6 +74,8 @@ pytest -q
 
 ### Further features
 - [x] Allow user-defined split
+- [ ] Formula similar to R's formula for model specification (almost linear models)
+- [ ] Utils to convert input data (e.g. csv of pandas DataFrame) to OccuData object
 - [ ] Filtering OccuData object on a subset of species
 - [ ] Models with qualitative variables
 - [ ] Save checkpoints along the training for sgd like fit
@@ -84,7 +86,7 @@ pytest -q
 ### Documentation
 - [ ] Docstrings for all functions and classes
 - [ ] Full documentation
-- [ ] Detailed examples for some use cases
+- [ ] Detailed examples for some use cases (custom model, different models pre-defined, cross-validation, penalization, etc.)
 
 
 ## License

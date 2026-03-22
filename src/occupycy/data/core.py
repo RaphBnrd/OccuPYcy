@@ -17,6 +17,7 @@ class OccuData():
       - visit_site_ids: list of site ids (e.g. names) in for each visit, length n_visits
       - X_psi: (n_sites, n_cov_psi) optional site/state covariates
       - X_d: (n_visits, n_cov_d) optional visit/detection covariates
+      - site_ids_in_X_psi: list of site ids corresponding to rows in X_psi, length n_sites. 
     """
     def __init__(
         self,
@@ -25,6 +26,7 @@ class OccuData():
         visit_site_ids: list[int] | list[str],
         X_psi: Optional[torch.Tensor] = None,
         X_d: Optional[torch.Tensor] = None,
+        site_ids_in_X_psi: Optional[list[int] | list[str]] = None
     ):
 
         self.y = torch.as_tensor(y)
@@ -58,6 +60,14 @@ class OccuData():
                 else:
                     message += "\nIf X_psi has fewer rows than unique site ids, consider adding missing rows to X_psi or dropping visits with site ids that don't have corresponding rows in X_psi."
                 raise ValueError(message)
+        if site_ids_in_X_psi is not None:
+            if len(set(site_ids_in_X_psi)) != len(site_ids_in_X_psi):
+                raise ValueError("site_ids_in_X_psi must contain unique site ids (no duplicates).")
+            if set(site_ids_in_X_psi) != set(visit_site_ids):
+                raise ValueError("site_ids_in_X_psi must contain the same unique site ids as visit_site_ids.")
+            if self.X_psi is not None:
+                if len(site_ids_in_X_psi) != self.X_psi.shape[0]:
+                    raise ValueError(f"site_ids_in_X_psi length ({len(site_ids_in_X_psi)}) must match X_psi first dim ({self.X_psi.shape[0]}).")
 
         # Usefull dimensions    
         self.n_sites = len(set(visit_site_ids))
@@ -76,8 +86,13 @@ class OccuData():
         # for site_id in visit_site_ids:
         #     if site_id not in unique_site_ids:
         #         unique_site_ids.append(site_id)
-        unique_site_ids = list(dict.fromkeys(visit_site_ids)) # preserves order of first occurrence
-        self.mapping_site_idx = {initial_id: idx for idx, initial_id in enumerate(unique_site_ids)}
+        if site_ids_in_X_psi is not None:
+            self.site_ids_in_X_psi = site_ids_in_X_psi
+        elif self.X_psi is None:
+            self.site_ids_in_X_psi = list(dict.fromkeys(visit_site_ids)) # preserves order of first occurrence
+        else: # If site_ids_in_X_psi is None and X_psi is not None
+            raise ValueError("If X_psi is provided, site_ids_in_X_psi must also be provided to map site ids to rows in X_psi.")
+        self.mapping_site_idx = {initial_id: idx for idx, initial_id in enumerate(self.site_ids_in_X_psi)}
         
         # Reindex visit_site_ids to site indices in X_psi (i.e. 0 to n_sites-1)
         # indices = [self.mapping_site_idx[site_id] for site_id in visit_site_ids]
@@ -197,10 +212,11 @@ class OccuData():
             print("Warning: site_mask contains duplicate indices. Duplicates are ignored.")
             site_id_mask = list(set(site_id_mask))
         
-        indices_site_mask = sorted([self.mapping_site_idx[site_id] for site_id in site_id_mask])
-        
+        indices_site_mask = [self.site_ids_in_X_psi.index(site_id) for site_id in site_id_mask]
+
         X_psi_new = self.X_psi[indices_site_mask] if self.X_psi is not None else None
-        
+        site_ids_in_X_psi_new = site_id_mask if self.X_psi is not None else None
+
         mapping_idxs_to_ids = {idx: site_id for site_id, idx in self.mapping_site_idx.items()}
         visit_site_ids = [mapping_idxs_to_ids[idx.item()] for idx in self.indices_visit_site]
 
@@ -213,7 +229,8 @@ class OccuData():
             y=y_new,
             visit_site_ids=visit_site_ids_new,
             X_psi=X_psi_new,
-            X_d=X_d_new
+            X_d=X_d_new,
+            site_ids_in_X_psi=site_ids_in_X_psi_new
         )
 
 
@@ -326,11 +343,13 @@ def collate_occu_sites(batch):
     else:
         X_psi = None
 
+    site_ids_in_X_psi = []
     visit_site_ids = []
     y_list = []
     X_d_list = []
     
     for i, b in enumerate(batch):
+        site_ids_in_X_psi.append(b["site_id"]) # add the site_id to the list of site ids in X_psi
         visit_site_ids += [b["site_id"]] * b["y"].shape[0] # add the site_id for each visit of the site
         y_list.append(b["y"])
         if b["X_d"] is not None:
@@ -343,5 +362,6 @@ def collate_occu_sites(batch):
         y=y,
         visit_site_ids=visit_site_ids,
         X_psi=X_psi,
-        X_d=X_d
+        X_d=X_d,
+        site_ids_in_X_psi=site_ids_in_X_psi
     )

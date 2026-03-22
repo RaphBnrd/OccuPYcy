@@ -78,7 +78,7 @@ def fit_sgd_like(
     penalization_type: Optional[str] = None,
     penalization_lambda_psi: Optional[float] = None,
     penalization_lambda_d: Optional[float] = None
-) -> Tuple[FitResult, OccuData]:
+) -> FitResult:
     """
     Mini-batch SGD-style fitting for any OccuModel.
 

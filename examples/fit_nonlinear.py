@@ -105,7 +105,7 @@ def main():
     
     # * * * Simulate data * * *
 
-    y, visit_site_ids, X_psi, X_d, true_z = simulate_non_linear(
+    y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z = simulate_non_linear(
         n_sites=1000, 
         n_total_visits_max=int(1e5),
         n_cov_psi=n_cov_psi,
@@ -142,7 +142,13 @@ def main():
     # Build OccuData
     # -------------------------------------------------------------
     
-    data = OccuData(y=y, visit_site_ids=visit_site_ids, X_psi=X_psi, X_d=X_d)
+    data = OccuData(
+        y=y, 
+        visit_site_ids=visit_site_ids, 
+        X_psi=X_psi, 
+        X_d=X_d,
+        site_ids_in_X_psi=site_ids_in_X_psi
+    )
 
     # -------------------------------------------------------------
     # Define models, learning rates and fitting methods

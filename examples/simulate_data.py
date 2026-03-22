@@ -115,7 +115,14 @@ def simulate_linear(
         axes[2, species_idx].set_title(f"d (species {species_idx})")
     fig.tight_layout()
 
-    return y.float(), indices_visit_site.long().tolist(), X_psi.float(), X_d.float(), z.float()
+    visit_site_ids = indices_visit_site.long().tolist()
+    # unique site ids, preserving the order of first occurence in visit_site_ids
+    site_ids_in_X_psi = list(dict.fromkeys(visit_site_ids))
+
+    # Filter X_psi on sites present in visit_site_ids
+    X_psi = X_psi[site_ids_in_X_psi]
+
+    return y.float(), visit_site_ids, site_ids_in_X_psi, X_psi.float(), X_d.float(), z.float()
 
 
 def simulate_non_linear(
@@ -228,4 +235,11 @@ def simulate_non_linear(
             axes[species_idx+1, 2].set_xscale("log")
         fig.tight_layout()
 
-    return y.float(), indices_visit_site.long().tolist(), X_psi.float(), X_d.float(), z.float()
+    visit_site_ids = indices_visit_site.long().tolist()
+    # unique site ids, preserving the order of first occurence in visit_site_ids
+    site_ids_in_X_psi = list(dict.fromkeys(visit_site_ids))
+
+    # Filter X_psi on sites present in visit_site_ids
+    X_psi = X_psi[site_ids_in_X_psi]
+
+    return y.float(), visit_site_ids, site_ids_in_X_psi, X_psi.float(), X_d.float(), z.float()
