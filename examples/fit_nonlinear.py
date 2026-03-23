@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import polars as pl
 import copy
 
-from simulate_data import simulate_non_linear
+from occupycy.data.simulate_data import simulate_non_linear
 from utils_plots import non_lin_initialize_plots, non_lin_plot_each_loop, non_lin_finalize_plots
 
 from occupycy.data import OccuData

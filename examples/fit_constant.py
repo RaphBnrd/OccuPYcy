@@ -3,7 +3,7 @@ import torch
 import matplotlib.pyplot as plt
 import polars as pl
 
-from simulate_data import simulate_constant
+from occupycy.data.simulate_data import simulate_constant
 
 from occupycy.data.core import OccuData
 from occupycy.fit import fit_lbfgs_full_batch, fit_sgd_like

@@ -32,7 +32,9 @@ def simulate_linear(
         coefs_psi=torch.tensor([[0.0]]), # shape: (n_species, n_cov_psi)
         intercept_d=torch.tensor([0.0]), # shape: (n_species,)
         coefs_d=torch.tensor([[0.0]]), # shape: (n_species, n_cov_d)
-        seed=None
+        seed=None, 
+        verbose=True, 
+        plot_summary=True
     ):
     g = torch.Generator().manual_seed(seed) if seed is not None else None
 
@@ -78,43 +80,45 @@ def simulate_linear(
     
     y = torch.bernoulli(d * z_for_visit, generator=g)  # shape: (n_visits_sub, n_species)
 
-    # Plot summary of simulated data
-    print("--- Simulated data summary ---")
-    print(f"  n_sites={n_sites_sub}")
-    print(f"  n_visits={n_visits_sub}")
-    print(f"  observed average psi (knowing true occupancy): {z.mean(dim=0)}")
-    print(f"  observed average d (knowing true occupancy):   {y.sum(dim=0) / z_for_visit.sum(dim=0)}")
+    if verbose:
+        # Plot summary of simulated data
+        print("--- Simulated data summary ---")
+        print(f"  n_sites={n_sites_sub}")
+        print(f"  n_visits={n_visits_sub}")
+        print(f"  observed average psi (knowing true occupancy): {z.mean(dim=0)}")
+        print(f"  observed average d (knowing true occupancy):   {y.sum(dim=0) / z_for_visit.sum(dim=0)}")
 
-    fig, axes = plt.subplots(3, intercept_psi.shape[0], figsize=(8, 6))
-    gs = fig.add_gridspec(3, intercept_psi.shape[0])
-    # Histogram of n_visits_per_site
-    ax0 = fig.add_subplot(gs[0, :])
-    # logbins = np.logspace(0, np.log10(n_visits_per_site.max().item()), 30)
-    # ax0.hist(n_visits_per_site.cpu(), bins=logbins, edgecolor='k')
-    # ax0.set_xscale("log")
-    ax0.hist(n_visits_per_site.cpu(), bins=30, edgecolor='k')
-    ax0.set_xlabel("Number of visits per site")
-    ax0.set_ylabel("Frequency")
-    ax0.set_title("Distribution of visits per site")
-    ax0.grid(True)
-    ax0.set_yscale("log")
-    for i in range(intercept_psi.shape[0]):
-        axes[0, i].axis('off')
-    # Histogram of psi
-    for species_idx in range(intercept_psi.shape[0]):
-        axes[1, species_idx].hist(psi[:, species_idx].cpu(), bins=30, edgecolor='k')
-        axes[1, species_idx].set_xlabel("Occupancy probability (psi)")
-        axes[1, species_idx].set_ylabel("Frequency")
-        axes[1, species_idx].grid(True)
-        axes[1, species_idx].set_title(f"psi (species {species_idx})")
-    # Histogram of d
-    for species_idx in range(intercept_d.shape[0]):
-        axes[2, species_idx].hist(d[:, species_idx].cpu(), bins=30, edgecolor='k')
-        axes[2, species_idx].set_xlabel("Detection probability (d)")
-        axes[2, species_idx].set_ylabel("Frequency")
-        axes[2, species_idx].grid(True)
-        axes[2, species_idx].set_title(f"d (species {species_idx})")
-    fig.tight_layout()
+    if plot_summary:
+        fig, axes = plt.subplots(3, intercept_psi.shape[0], figsize=(8, 6))
+        gs = fig.add_gridspec(3, intercept_psi.shape[0])
+        # Histogram of n_visits_per_site
+        ax0 = fig.add_subplot(gs[0, :])
+        # logbins = np.logspace(0, np.log10(n_visits_per_site.max().item()), 30)
+        # ax0.hist(n_visits_per_site.cpu(), bins=logbins, edgecolor='k')
+        # ax0.set_xscale("log")
+        ax0.hist(n_visits_per_site.cpu(), bins=30, edgecolor='k')
+        ax0.set_xlabel("Number of visits per site")
+        ax0.set_ylabel("Frequency")
+        ax0.set_title("Distribution of visits per site")
+        ax0.grid(True)
+        ax0.set_yscale("log")
+        for i in range(intercept_psi.shape[0]):
+            axes[0, i].axis('off')
+        # Histogram of psi
+        for species_idx in range(intercept_psi.shape[0]):
+            axes[1, species_idx].hist(psi[:, species_idx].cpu(), bins=30, edgecolor='k')
+            axes[1, species_idx].set_xlabel("Occupancy probability (psi)")
+            axes[1, species_idx].set_ylabel("Frequency")
+            axes[1, species_idx].grid(True)
+            axes[1, species_idx].set_title(f"psi (species {species_idx})")
+        # Histogram of d
+        for species_idx in range(intercept_d.shape[0]):
+            axes[2, species_idx].hist(d[:, species_idx].cpu(), bins=30, edgecolor='k')
+            axes[2, species_idx].set_xlabel("Detection probability (d)")
+            axes[2, species_idx].set_ylabel("Frequency")
+            axes[2, species_idx].grid(True)
+            axes[2, species_idx].set_title(f"d (species {species_idx})")
+        fig.tight_layout()
 
     visit_site_ids = indices_visit_site.long().tolist()
     # unique site ids, preserving the order of first occurence in visit_site_ids
@@ -176,7 +180,7 @@ def simulate_non_linear(
     z_for_visit = z[indices_visit_site]  # shape: (n_visits_sub, n_species)
     
     d = f_d(X_d)  # shape: (n_visits_sub, n_species)
-    
+
     y = torch.bernoulli(d * z_for_visit, generator=g)  # shape: (n_visits_sub, n_species)
 
     detected = torch.zeros((n_sites, y.shape[1]), device=y.device, dtype=y.dtype)
@@ -251,7 +255,7 @@ def simulate_non_linear(
 
     return y.float(), visit_site_ids, site_ids_in_X_psi, X_psi.float(), X_d.float(), z.float()
 
-def from_res_to_dataframe(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, z):
+def _from_res_to_dataframe(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, z):
 
     # * * * Visit dataframe * * *
 
@@ -301,7 +305,9 @@ def simulate_linear_dataframe(
         coefs_psi=torch.tensor([[0.0]]), # shape: (n_species, n_cov_psi)
         intercept_d=torch.tensor([0.0]), # shape: (n_species,)
         coefs_d=torch.tensor([[0.0]]), # shape: (n_species, n_cov_d)
-        seed=None
+        seed=None,
+        verbose=True,
+        plot_summary=True
     ):
     
     y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z = simulate_linear(
@@ -312,10 +318,12 @@ def simulate_linear_dataframe(
         coefs_psi=coefs_psi,
         intercept_d=intercept_d, 
         coefs_d=coefs_d, 
-        seed=seed
+        seed=seed,
+        verbose=verbose,
+        plot_summary=plot_summary
     )
 
-    df_visit, df_site = from_res_to_dataframe(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z)
+    df_visit, df_site = _from_res_to_dataframe(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z)
 
     return df_visit, df_site
 
@@ -349,6 +357,6 @@ def simulate_non_linear_dataframe(
         verbose=verbose
     )
 
-    df_visit, df_site = from_res_to_dataframe(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z)
+    df_visit, df_site = _from_res_to_dataframe(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z)
 
     return df_visit, df_site

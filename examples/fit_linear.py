@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import polars as pl
 from copy import deepcopy
 
-from simulate_data import simulate_linear
+from occupycy.data.simulate_data import simulate_linear
 
 from occupycy.data.core import OccuData
 from occupycy.fit import fit_lbfgs_full_batch, fit_sgd_like
