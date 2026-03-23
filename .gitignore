@@ -13,3 +13,6 @@ __pycache__/
 
 # Other
 .DS_Store
+
+# Files
+examples/data/

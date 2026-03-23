@@ -1,5 +1,6 @@
 import torch
 import matplotlib.pyplot as plt
+import polars as pl
 
 def simulate_constant(
         n_sites=400, 
@@ -178,11 +179,17 @@ def simulate_non_linear(
     
     y = torch.bernoulli(d * z_for_visit, generator=g)  # shape: (n_visits_sub, n_species)
 
+    detected = torch.zeros((n_sites, y.shape[1]), device=y.device, dtype=y.dtype)
+    detected.index_add_(0, indices_visit_site, y)
+    detected = (detected > 0) # shape: (n_sites, n_species)
+
     # Plot summary of simulated data
     if verbose:
         print("--- Simulated data summary ---")
         print(f"  n_sites={n_sites_sub}")
         print(f"  n_visits={n_visits_sub}")
+        print(f"  number of detections (per species): {y.sum(dim=0)}")
+        print(f"  number of occupied sites (per species): {detected.sum(dim=0)}")
         print(f"  range of psi * d: {(psi[indices_visit_site] * d).min():3e} to { (psi[indices_visit_site] * d).max():3e}")
         print(f"  observed average psi (knowing true occupancy): {z.mean(dim=0)}")
         print(f"  observed average d (knowing true occupancy):   {y.sum(dim=0) / z_for_visit.sum(dim=0)}")
@@ -243,3 +250,105 @@ def simulate_non_linear(
     X_psi = X_psi[site_ids_in_X_psi]
 
     return y.float(), visit_site_ids, site_ids_in_X_psi, X_psi.float(), X_d.float(), z.float()
+
+def from_res_to_dataframe(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, z):
+
+    # * * * Visit dataframe * * *
+
+    df_visit = pl.DataFrame()
+    # Add site id column
+    fmt = f"site_{{:0{len(str(max(visit_site_ids)))}d}}"
+    visit_site_ids_str = [fmt.format(i) for i in visit_site_ids]
+    df_visit = df_visit.with_columns(
+        pl.Series("visit_site_id", visit_site_ids_str)
+    )
+    # Add species presence/absence columns
+    for species_idx in range(y.shape[1]):
+        df_visit = df_visit.with_columns(
+            pl.Series(f"y_sp{species_idx}", y[:, species_idx])
+        )
+    # Add covariates for detection columns
+    for cov_idx in range(X_d.shape[1]):
+        df_visit = df_visit.with_columns(
+            pl.Series(f"X_d_c{cov_idx}", X_d[:, cov_idx])
+        )
+
+    # * * * Site dataframe * * *
+
+    df_site = pl.DataFrame()
+    # Add site id column
+    site_ids_in_X_psi_str = [fmt.format(i) for i in site_ids_in_X_psi]
+    df_site = df_site.with_columns(
+        pl.Series("site_id", site_ids_in_X_psi_str)
+    )
+    # Add species presence/absence columns (knowing true occupancy)
+    for species_idx in range(z.shape[1]):
+        df_site = df_site.with_columns(
+            pl.Series(f"true_sp{species_idx}", z[:, species_idx])
+        )
+    # Add covariates for occupancy columns
+    for cov_idx in range(X_psi.shape[1]):
+        df_site = df_site.with_columns(
+            pl.Series(f"X_psi_c{cov_idx}", X_psi[:, cov_idx])
+        )
+
+    return df_visit, df_site
+
+def simulate_linear_dataframe(
+        n_sites=400, n_total_visits_max=None,
+        f_effort=lambda x1: torch.exp(1.5*x1), 
+        intercept_psi=torch.tensor([0.0]), # shape: (n_species,)
+        coefs_psi=torch.tensor([[0.0]]), # shape: (n_species, n_cov_psi)
+        intercept_d=torch.tensor([0.0]), # shape: (n_species,)
+        coefs_d=torch.tensor([[0.0]]), # shape: (n_species, n_cov_d)
+        seed=None
+    ):
+    
+    y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z = simulate_linear(
+        n_sites=n_sites, 
+        n_total_visits_max=n_total_visits_max,
+        f_effort=f_effort,
+        intercept_psi=intercept_psi,
+        coefs_psi=coefs_psi,
+        intercept_d=intercept_d, 
+        coefs_d=coefs_d, 
+        seed=seed
+    )
+
+    df_visit, df_site = from_res_to_dataframe(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z)
+
+    return df_visit, df_site
+
+def simulate_non_linear_dataframe(
+        n_sites=400, 
+        n_total_visits_max=None,
+        n_cov_psi=2,
+        n_cov_d=1,
+        f_effort=lambda x1: torch.exp(1.5*x1), 
+        f_psi=lambda X_psi: torch.sigmoid(
+            torch.tensor([-1.0, 0.5]) + X_psi @ torch.tensor([[2.0, -1.0], [-1.0, 1.0]]).T
+        ), # from X_psi of shape (n_sites, n_cov_psi) to psi of shape (n_sites, n_species)
+        f_d=lambda X_d: torch.sigmoid(
+            torch.tensor([-0.5, 1.0]) + X_d @ torch.tensor([[1.0], [-2.0]]).T
+        ), # from X_d of shape (n_visits, n_cov_d) to d of shape (n_visits, n_species)
+        seed=None,
+        plot_summary=True,
+        verbose=True
+    ):
+
+    y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z = simulate_non_linear(
+        n_sites=n_sites, 
+        n_total_visits_max=n_total_visits_max,
+        n_cov_psi=n_cov_psi,
+        n_cov_d=n_cov_d,
+        f_effort=f_effort,
+        f_psi=f_psi,
+        f_d=f_d,
+        seed=seed,
+        plot_summary=plot_summary,
+        verbose=verbose
+    )
+
+    df_visit, df_site = from_res_to_dataframe(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z)
+
+    return df_visit, df_site
