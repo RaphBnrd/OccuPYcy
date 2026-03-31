@@ -176,7 +176,18 @@ def main():
                 # 'adam', 
                 # 'lbfgs_full_batch'
             ],
-            'lrs': [1e-2, 5e-3] + [1e-2] * 8,
+            'lrs': [
+                1e-2, 
+                5e-3,
+                1e-2,
+                1e-2,
+                1e-2,
+                # 1e-2,
+                # 1e-2,
+                5e-3,
+                # 1e-2,
+                # 1e-2
+            ],
             'penalty': [
                 (None, 0.0, 0.0), 
                 ("l2_params", 1e-4, 0.1), 
@@ -296,6 +307,7 @@ def main():
             label = f"{model_name} | {fit_method}"
 
             model = copy.deepcopy(this_dict['model'])
+            data.reset_dataloaders()
 
             # In case penalty is not specified for this method, we set it to None with lambda=0 (i.e. no penalization)
             if 'penalty' in this_dict:

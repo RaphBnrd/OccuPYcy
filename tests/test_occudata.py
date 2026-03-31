@@ -122,7 +122,7 @@ def test_to_returns_new_object():
     assert data is not initial
     assert initial.y.dtype != data.y.dtype
 
-def test_train_dataloader_returns_occudata_batches():
+def test_train_dataloader_returns_dict_batches():
     y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d = _valid_payload()
     data = OccuData(
         y=y, 
@@ -136,10 +136,12 @@ def test_train_dataloader_returns_occudata_batches():
 
     batch = next(iter(data.train_loader))
 
-    assert isinstance(batch, OccuData)
-    assert batch.y.ndim == 2
-    assert batch.indices_visit_site.ndim == 1
-    
+    assert isinstance(batch, dict)
+    assert batch['y'].ndim == 2
+    assert batch['indices_visit_site'].ndim == 1
+    assert batch['X_psi'] is None or batch['X_psi'].ndim == 2
+    assert batch['X_d'] is None or batch['X_d'].ndim == 2
+
 def test_collate_rebuilds_visit_site_ids_within_batch():
     y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d = _valid_payload()
     data = OccuData(
@@ -154,7 +156,8 @@ def test_collate_rebuilds_visit_site_ids_within_batch():
 
     batch = next(iter(data.train_loader))
 
-    assert set(batch.mapping_site_idx.keys()).issubset(set(visit_site_ids))
+    assert set(batch['indices_visit_site'].unique().tolist()) == \
+        set(range(torch.unique(batch['indices_visit_site']).numel()))
 
 def test_build_dataloaders_split_sizes():
     y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d = _valid_payload()
@@ -180,6 +183,7 @@ def test_build_dataloaders_seed_reproducibility():
     visit_site_ids = [0, 0,  1,  2,  2,  2,  3,  2, 
                        4, 4,  4,  4,  5,  5,  6,  7,
                        8, 9, 10, 11, 12, 13, 14, 15] # shape: (24,)
+    visit_site_ids = [f"site_{i}" for i in visit_site_ids]
     
     data1 = OccuData(y=y, visit_site_ids=visit_site_ids)
     data2 = OccuData(y=y, visit_site_ids=visit_site_ids)
@@ -189,16 +193,16 @@ def test_build_dataloaders_seed_reproducibility():
     
     train_sites1 = []
     for b in data1.train_loader:
-        train_sites1 += list(b.mapping_site_idx.keys())
+        train_sites1 += list(b['site_ids_in_X_psi'])
     train_sites2 = []
     for b in data2.train_loader:
-        train_sites2 += list(b.mapping_site_idx.keys())
+        train_sites2 += list(b['site_ids_in_X_psi'])
     assert train_sites1 == train_sites2
 
     val_sites1 = []
     for b in data1.val_loader:
-        val_sites1 += list(b.mapping_site_idx.keys())
+        val_sites1 += list(b['site_ids_in_X_psi'])
     val_sites2 = []
     for b in data2.val_loader:
-        val_sites2 += list(b.mapping_site_idx.keys())
+        val_sites2 += list(b['site_ids_in_X_psi'])
     assert val_sites1 == val_sites2

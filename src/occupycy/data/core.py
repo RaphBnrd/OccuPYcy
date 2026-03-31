@@ -29,6 +29,7 @@ class OccuData():
         site_ids_in_X_psi: Optional[list[int] | list[str]] = None
     ):
 
+        print("Initializing OccuData...")
         self.y = torch.as_tensor(y)
         self.X_psi = torch.as_tensor(X_psi) if X_psi is not None else None
         self.X_d = torch.as_tensor(X_d) if X_d is not None else None
@@ -103,11 +104,22 @@ class OccuData():
             dtype=torch.long,
             device=self.y.device
         )
+        # Init _mask_visits_each_site to None if not used
+        self._mask_visits_each_site = None
 
         # DataLoaders for train/val/test splits.
         self.train_loader = None
         self.val_loader = None
         self.test_loader = None
+    
+    @property
+    def mask_visits_each_site(self):
+        if self._mask_visits_each_site is None:
+            self._mask_visits_each_site = [
+                torch.where(self.indices_visit_site == i)[0]
+                for i in range(self.n_sites)
+            ]
+        return self._mask_visits_each_site
 
     def to(
         self, 
@@ -290,7 +302,8 @@ class OccuSiteDataset(Dataset):
         site_id = self.site_ids[idx] # site_id is the original site id (name)
         idx_site = self.data.mapping_site_idx[site_id] # scalar index corresponding to site_id in X_psi
 
-        mask = self.data.indices_visit_site == idx_site # shape (n_visits,) with n_visits_sub True values corresponding to visits for the site of interest
+        # mask = self.data.indices_visit_site == idx_site # shape (n_visits,) with n_visits_sub True values corresponding to visits for the site of interest
+        mask = self.data.mask_visits_each_site[idx_site]
 
         y = self.data.y[mask] # shape (n_visits_sub, n_species)
         X_d = self.data.X_d[mask] if self.data.X_d is not None else None # shape (n_visits_sub, n_cov_d) or None
@@ -352,10 +365,12 @@ def collate_occu_sites(batch):
     visit_site_ids = []
     y_list = []
     X_d_list = []
+    indices_visit_site = []
     
     for i, b in enumerate(batch):
         site_ids_in_X_psi.append(b["site_id"]) # add the site_id to the list of site ids in X_psi
         visit_site_ids += [b["site_id"]] * b["y"].shape[0] # add the site_id for each visit of the site
+        indices_visit_site += [i] * b["y"].shape[0] # add the site index for each visit of the site
         y_list.append(b["y"])
         if b["X_d"] is not None:
             X_d_list.append(b["X_d"])
@@ -363,10 +378,12 @@ def collate_occu_sites(batch):
 
     X_d = torch.cat(X_d_list) if X_d_list else None # shape (total_n_visits, n_cov_d)
     
-    return OccuData(
-        y=y,
-        visit_site_ids=visit_site_ids,
-        X_psi=X_psi,
-        X_d=X_d,
-        site_ids_in_X_psi=site_ids_in_X_psi
-    )
+    indices_visit_site = torch.tensor(indices_visit_site, dtype=torch.long)
+
+    return {
+        "y": y,
+        "indices_visit_site": indices_visit_site,
+        "X_psi": X_psi,
+        "X_d": X_d,
+        "site_ids_in_X_psi": site_ids_in_X_psi
+    }

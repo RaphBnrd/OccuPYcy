@@ -24,11 +24,14 @@ def forward_path_one_batch(
     species_reduction: str,
     device: torch.device
 ):
-    batch.to(device=device)
-    y = batch.y # shape: (n_visits, n_species)
-    indices_visit_site = batch.indices_visit_site
-    X_psi = batch.X_psi # shape: (n_sites, n_cov_psi) or None
-    X_d = batch.X_d # shape: (n_visits, n_cov_d) or None
+    y = batch["y"].to(device=device) # shape: (n_visits, n_species)
+    indices_visit_site = batch["indices_visit_site"].to(device=device)
+    X_psi = batch["X_psi"] # shape: (n_sites, n_cov_psi) or None
+    if X_psi is not None:
+        X_psi = X_psi.to(device=device)
+    X_d = batch["X_d"] # shape: (n_visits, n_cov_d) or None
+    if X_d is not None:
+        X_d = X_d.to(device=device)
 
     logit_psi, logit_d = model.forward_logits(
         X_psi=X_psi,
@@ -37,9 +40,11 @@ def forward_path_one_batch(
 
     # Broadcast if intercept-only
     if X_psi is None:
-        logit_psi = logit_psi.expand(batch.n_sites, -1)
+        n_sites = len(torch.unique(indices_visit_site))
+        logit_psi = logit_psi.expand(n_sites, -1)
     if X_d is None:
-        logit_d = logit_d.expand(batch.n_visits, -1)
+        n_visits = y.shape[0]
+        logit_d = logit_d.expand(n_visits, -1)
     
     loss = loss_fn(
         y,
@@ -110,8 +115,9 @@ def fit_sgd_like(
             device=device
         )
     else:
-        if next(iter(data.train_loader)).n_sites != batch_size:
-            print(f"Warning: provided dataloader has batch size {next(iter(data.train_loader)).n_sites}, which does not match the specified batch_size {batch_size}. Using the provided dataloader's batch size.")
+        n_sites_in_dataloader = len(set(next(iter(data.train_loader))["indices_visit_site"]))
+        if n_sites_in_dataloader != batch_size:
+            print(f"Warning: provided dataloader has batch size {n_sites_in_dataloader}, which does not match the specified batch_size {batch_size}. Using the provided dataloader's batch size.")
 
     # Penalization setup
     if penalization_type in ["l2_logits_naive", "l1_logits_naive"]:

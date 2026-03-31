@@ -2,7 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 import polars as pl
 
-def filter_subset_visits(indices_visit_site, n_sites, n_total_visits_max, generator, keep_all_sites=False, seed=None):
+def filter_subset_visits(indices_visit_site, n_sites, n_total_visits_max, generator, keep_all_sites=False):
 
     print(f"Subsampling from {indices_visit_site.shape[0]} visits to {n_total_visits_max} visits.")
 
@@ -63,7 +63,7 @@ def simulate_constant(
         print(f"  n_sites={n_sites}, n_visits_per_site={n_visits_per_site}, n_species={n_species}")
         print(f"  number of detections (per species): {y.sum(dim=0)}")
         print(f"  number of occupied sites (per species): {detected.sum(dim=0)}")
-        print(f"  range of psi * d: {(psi[indices_visit_site] * d).min():3e} to { (psi[indices_visit_site] * d).max():3e}")
+        print(f"  range of psi * d: {(psi * d).min():3e} to { (psi * d).max():3e}")
         print(f"  observed average psi (knowing true occupancy): {z.mean(dim=0)}")
         print(f"  observed average d (knowing true occupancy):   {y.sum(dim=0) / z_for_visit.sum(dim=0)}")
 
@@ -101,8 +101,8 @@ def simulate_linear(
     if n_total_visits_max is not None: # Randomly subsample visits to have at most n_total_visits_max
         if indices_visit_site.shape[0] > n_total_visits_max:
             indices_visit_site = filter_subset_visits(
-                indices_visit_site, n_sites, n_total_visits_max, generator=g, 
-                keep_all_sites=keep_all_sites, seed=seed
+                indices_visit_site, n_sites, n_total_visits_max, 
+                generator=g, keep_all_sites=keep_all_sites
             )
     n_visits_per_site = torch.bincount(indices_visit_site, minlength=n_sites)  # shape: (n_sites,) (for each site, how many visits it has)
     # Reassign site indices to be consecutive after filtering
@@ -217,7 +217,8 @@ def simulate_non_linear(
     if n_total_visits_max is not None: # Randomly subsample visits to have at most n_total_visits_max
         if indices_visit_site.shape[0] > n_total_visits_max:
             indices_visit_site = filter_subset_visits(
-                indices_visit_site, n_sites, n_total_visits_max, keep_all_sites=keep_all_sites, seed=seed
+                indices_visit_site, n_sites, n_total_visits_max, 
+                generator=g, keep_all_sites=keep_all_sites
             )
     n_visits_per_site = torch.bincount(indices_visit_site, minlength=n_sites)  # shape: (n_sites,) (for each site, how many visits it has)
     # Reassign site indices to be consecutive after filtering
