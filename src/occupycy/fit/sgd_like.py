@@ -13,6 +13,7 @@ from occupycy.likelihood import nll_logits
 from occupycy.models import OccuModel
 from .naive_estimator import fit_naive_estimator
 from occupycy.likelihood.penalty import loss_penalty
+from .checkpoints import save_checkpoint_if_best
 
 
 def forward_path_one_batch(
@@ -74,10 +75,15 @@ def fit_sgd_like(
     test_fraction: float = 0.0,
     splitting: Optional[Dict[str, list]] = None,
     patience_early_stopping: Optional[int] = None,
+    min_delta_early_stopping: float = 0.0,
+    score_early_stopping: str = "val_loss",
     patience_reduceLROnPlateau: Optional[int] = None,
+    factor_reduceLROnPlateau: float = 0.5,
+    score_reduceLROnPlateau: str = "val_loss",
     penalization_type: Optional[str] = None,
     penalization_lambda_psi: Optional[float] = None,
-    penalization_lambda_d: Optional[float] = None
+    penalization_lambda_d: Optional[float] = None,
+    path_checkpoints: Optional[str] = None
 ) -> FitResult:
     """
     Mini-batch SGD-style fitting for any OccuModel.
@@ -130,6 +136,7 @@ def fit_sgd_like(
             list(model.psi_model.parameters()) + list(model.d_model.parameters()),
             lr=lr_psi, max_iter=1
         )
+        opt_psi, opt_d = None, None
     else:
         # NB: L2 regularization is implemented as weight decay in the optimizer
         opt_psi = optimizer_psi_cls(
@@ -142,19 +149,29 @@ def fit_sgd_like(
             lr=lr_d, 
             weight_decay=penalization_lambda_d if penalization_type == "l2_params" else 0.0
         )
+        opt = None
 
     # Early stopping
     if patience_early_stopping is not None:
-        if data.val_loader is None:
+        if data.val_loader is None and score_early_stopping == "val_loss":
             raise ValueError("Early stopping requires a validation set. Please provide a val_loader in the data or set patience_early_stopping to None.")
-        early_stopper = EarlyStopper(patience=patience_early_stopping, min_delta=0.0)
+        elif score_early_stopping not in ["val_loss", "train_loss"]:
+            raise ValueError(f"Invalid score_early_stopping: {score_early_stopping}. Must be 'val_loss' or 'train_loss'.")
+        early_stopper = EarlyStopper(
+            patience=patience_early_stopping, 
+            min_delta=min_delta_early_stopping
+        )
 
     # LR scheduler
     if patience_reduceLROnPlateau is not None:
+        if data.val_loader is None and score_reduceLROnPlateau == "val_loss":
+            raise ValueError("ReduceLROnPlateau requires a validation set if score_reduceLROnPlateau is set to 'val_loss'. Please provide a val_loader in the data or set patience_reduceLROnPlateau to None or score_reduceLROnPlateau to 'train_loss'.")
+        elif score_reduceLROnPlateau not in ["val_loss", "train_loss"]:
+            raise ValueError(f"Invalid score_reduceLROnPlateau: {score_reduceLROnPlateau}. Must be 'val_loss' or 'train_loss'.")
         from torch.optim.lr_scheduler import ReduceLROnPlateau
         kwargs_scheduler = {
             "mode": "min",
-            "factor": 0.5,
+            "factor": factor_reduceLROnPlateau,
             "patience": patience_reduceLROnPlateau,
             "min_lr": 1e-5
         }
@@ -262,6 +279,8 @@ def fit_sgd_like(
                     )
                     last_val_loss += float(val_loss.cpu().item())
             val_loss_history.append(last_val_loss)
+        else:
+            last_val_loss = None
 
         lr_psi_history.append(opt_psi.param_groups[0]['lr'] if optimizer_psi_cls != torch.optim.LBFGS else opt.param_groups[0]['lr'])
         lr_d_history.append(opt_d.param_groups[0]['lr'] if optimizer_d_cls != torch.optim.LBFGS else opt.param_groups[0]['lr'])
@@ -274,12 +293,49 @@ def fit_sgd_like(
                 final_params_model_psi = deepcopy(model.psi_model.state_dict())
                 final_params_model_d = deepcopy(model.d_model.state_dict())
                 epoch_best_model = epoch
+                save_checkpoint_if_best(
+                    path_checkpoints=path_checkpoints,
+                    epoch=epoch,
+                    last_train_loss=last_train_loss,
+                    last_val_loss=last_val_loss,
+                    final_params_model_psi=final_params_model_psi,
+                    final_params_model_d=final_params_model_d,
+                    opt_psi=opt_psi,
+                    opt_d=opt_d,
+                    opt=opt,
+                    optimizer_psi_cls=optimizer_psi_cls,
+                    optimizer_d_cls=optimizer_d_cls,
+                    train_loss_history=train_loss_history,
+                    val_loss_history=val_loss_history,
+                    lr_psi_history=lr_psi_history,
+                    lr_d_history=lr_d_history,
+                    verbose=False
+                )
         else:
             if last_train_loss < final_train_loss:
                 final_train_loss = last_train_loss
                 final_params_model_psi = deepcopy(model.psi_model.state_dict())
                 final_params_model_d = deepcopy(model.d_model.state_dict())
                 epoch_best_model = epoch
+                save_checkpoint_if_best(
+                    path_checkpoints=path_checkpoints,
+                    epoch=epoch,
+                    last_train_loss=last_train_loss,
+                    last_val_loss=last_val_loss,
+                    final_params_model_psi=final_params_model_psi,
+                    final_params_model_d=final_params_model_d,
+                    opt_psi=opt_psi,
+                    opt_d=opt_d,
+                    opt=opt,
+                    optimizer_psi_cls=optimizer_psi_cls,
+                    optimizer_d_cls=optimizer_d_cls,
+                    train_loss_history=train_loss_history,
+                    val_loss_history=val_loss_history,
+                    lr_psi_history=lr_psi_history,
+                    lr_d_history=lr_d_history,
+                    verbose=False
+                )
+        
         # Update progress bar
         pbar.set_postfix({
             "train_loss": last_train_loss,
@@ -289,19 +345,46 @@ def fit_sgd_like(
         
         # Early stopping check
         if patience_early_stopping is not None:
-            if early_stopper.early_stop(last_val_loss):
+            if score_early_stopping == "val_loss":
+                score_ES = last_val_loss
+            elif score_early_stopping == "train_loss":
+                score_ES = last_train_loss
+            if early_stopper.early_stop(score_ES):
                 print(f"Early stopping at epoch n°{epoch + 1}")
                 break
         
         # LR scheduler step
         if patience_reduceLROnPlateau is not None:
+            if score_reduceLROnPlateau == "val_loss":
+                score_RLROP = last_val_loss
+            elif score_reduceLROnPlateau == "train_loss":
+                score_RLROP = last_train_loss
             if optimizer_psi_cls == torch.optim.LBFGS:
-                scheduler.step(last_val_loss)
+                scheduler.step(score_RLROP)
             else:
-                scheduler_state.step(last_val_loss)
-                scheduler_det.step(last_val_loss)
-    
+                scheduler_state.step(score_RLROP)
+                scheduler_det.step(score_RLROP)
+
     pbar.close()
+    
+    save_checkpoint_if_best(
+        path_checkpoints=path_checkpoints,
+        epoch=epoch,
+        last_train_loss=last_train_loss,
+        last_val_loss=last_val_loss,
+        final_params_model_psi=final_params_model_psi,
+        final_params_model_d=final_params_model_d,
+        opt_psi=opt_psi,
+        opt_d=opt_d,
+        opt=opt,
+        optimizer_psi_cls=optimizer_psi_cls,
+        optimizer_d_cls=optimizer_d_cls,
+        train_loss_history=train_loss_history,
+        val_loss_history=val_loss_history,
+        lr_psi_history=lr_psi_history,
+        lr_d_history=lr_d_history,
+        verbose=False
+    )
 
     history = {"train_loss": train_loss_history, "lr_psi": lr_psi_history, "lr_d": lr_d_history}
     if len(val_loss_history) > 0:

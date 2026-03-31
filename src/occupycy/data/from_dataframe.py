@@ -19,17 +19,27 @@ def data_from_dataframe(
     """
     Create the data dictionary needed to create an OccuData object from pandas or polars DataFrames containing the visit-level and site-level data.
     """
-    # Convert to polars if input is pandas DataFrame
-    if isinstance(df_visit, pd.DataFrame):
-        df_visit = pl.from_pandas(df_visit)
-    if df_site is not None and isinstance(df_site, pd.DataFrame):
-        df_site = pl.from_pandas(df_site)
+    # # Convert to polars if input is pandas DataFrame
+    # if isinstance(df_visit, pd.DataFrame):
+    #     df_visit = pl.from_pandas(df_visit)
+    # if df_site is not None and isinstance(df_site, pd.DataFrame):
+    #     df_site = pl.from_pandas(df_site)
+    if not isinstance(df_visit, (pd.DataFrame, pl.DataFrame)):
+        raise ValueError("df_visit must be a pandas or polars DataFrame")
+    if df_site is not None and not isinstance(df_site, (pd.DataFrame, pl.DataFrame)):
+        raise ValueError("df_site must be a pandas or polars DataFrame or None")
 
     # Define y
-    y = torch.tensor(df_visit.select(cols_y).to_numpy(), dtype=torch.float32, device=device) # shape: (n_visits, n_species)
+    if isinstance(df_visit, pd.DataFrame):
+        y = torch.tensor(df_visit[cols_y].to_numpy(), dtype=torch.float32, device=device) # shape: (n_visits, n_species)
+    elif isinstance(df_visit, pl.DataFrame):
+        y = torch.tensor(df_visit.select(cols_y).to_numpy(), dtype=torch.float32, device=device) # shape: (n_visits, n_species)
     
     # Define visit_site_ids
-    visit_site_ids = df_visit[col_visit_site_ids].to_list() # length: n_visits
+    if isinstance(df_visit, pd.DataFrame):
+        visit_site_ids = df_visit[col_visit_site_ids].to_list() # length: n_visits
+    elif isinstance(df_visit, pl.DataFrame):
+        visit_site_ids = df_visit.select(col_visit_site_ids).to_series().to_list() # length: n_visits
 
     # Define site_ids_in_X_psi (could be None) and check consistency with visit_site_ids
     if df_site is None:
@@ -40,7 +50,10 @@ def data_from_dataframe(
         else:
             raise ValueError("If df_site and cols_covars_psi is provided, then col_site_ids_in_X_psi must also be provided to specify the column in df_site that contains the site IDs corresponding to the rows of X_psi")
     else:
-        site_ids_in_X_psi = df_site[col_site_ids_in_X_psi].to_list() # length: n_sites_in_X_psi
+        if isinstance(df_site, pd.DataFrame):
+            site_ids_in_X_psi = df_site[col_site_ids_in_X_psi].to_list() # length: n_sites_in_X_psi
+        elif isinstance(df_site, pl.DataFrame):
+            site_ids_in_X_psi = df_site.select(col_site_ids_in_X_psi).to_series().to_list() # length: n_sites_in_X_psi
     if site_ids_in_X_psi is not None:
         if not set(visit_site_ids).issubset(set(site_ids_in_X_psi)):
             raise ValueError("The set of site IDs in df_visit (visit_site_ids) must be a subset of the set of site IDs in df_site (site_ids_in_X_psi)")
@@ -49,21 +62,32 @@ def data_from_dataframe(
     if site_ids_in_X_psi is not None and len(site_ids_in_X_psi) > len(set(visit_site_ids)):
         if verbose:
             print("Downsampling site covariates to only include sites that are present in visit_site_ids")
-        mask = df_site[col_site_ids_in_X_psi].is_in(visit_site_ids)
-        df_site = df_site.filter(mask)
-        site_ids_in_X_psi = df_site[col_site_ids_in_X_psi].to_list() # Update site_ids_in_X_psi after filtering
+        if isinstance(df_site, pd.DataFrame):
+            mask = df_site[col_site_ids_in_X_psi].isin(visit_site_ids)
+            df_site = df_site[mask]
+            site_ids_in_X_psi = df_site[col_site_ids_in_X_psi].to_list() # Update site_ids_in_X_psi after filtering
+        else: # polars DataFrame
+            mask = df_site[col_site_ids_in_X_psi].is_in(visit_site_ids)
+            df_site = df_site.filter(mask)
+            site_ids_in_X_psi = df_site.select(col_site_ids_in_X_psi).to_series().to_list() # Update site_ids_in_X_psi after filtering
     
     # Define X_psi
     if cols_covars_psi is None:
         X_psi = None
     else:
-        X_psi = torch.tensor(df_site.select(cols_covars_psi).to_numpy(), dtype=torch.float32, device=device) # shape: (n_sites_in_X_psi, n_cov_psi)
+        if isinstance(df_site, pd.DataFrame):
+            X_psi = torch.tensor(df_site[cols_covars_psi].to_numpy(), dtype=torch.float32, device=device) # shape: (n_sites_in_X_psi, n_cov_psi)
+        elif isinstance(df_site, pl.DataFrame):
+            X_psi = torch.tensor(df_site.select(cols_covars_psi).to_numpy(), dtype=torch.float32, device=device) # shape: (n_sites_in_X_psi, n_cov_psi)
     
     # Define X_d
     if cols_covars_d is None:
         X_d = None
     else:
-        X_d = torch.tensor(df_visit.select(cols_covars_d).to_numpy(), dtype=torch.float32, device=device) # shape: (n_visits, n_cov_d)
+        if isinstance(df_visit, pd.DataFrame):
+            X_d = torch.tensor(df_visit[cols_covars_d].to_numpy(), dtype=torch.float32, device=device) # shape: (n_visits, n_cov_d)
+        elif isinstance(df_visit, pl.DataFrame):
+            X_d = torch.tensor(df_visit.select(cols_covars_d).to_numpy(), dtype=torch.float32, device=device) # shape: (n_visits, n_cov_d)
 
     # Print shapes and lengths if needed
     if verbose:

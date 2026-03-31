@@ -267,7 +267,11 @@ def fit_sgd_like_cv(
     loss_fn: Grid[Callable[..., torch.Tensor]] = nll_logits,
     device: Grid[Optional[torch.device]] = None,
     patience_early_stopping: Grid[Optional[int]] = None,
+    min_delta_early_stopping: Grid[Optional[float]] = 0.0,
+    score_early_stopping: Grid[str] = "val_loss",
     patience_reduceLROnPlateau: Grid[Optional[int]] = None,
+    factor_reduceLROnPlateau: Grid[float] = 0.5,
+    score_reduceLROnPlateau: Grid[str] = "val_loss",
     penalization_type: Grid[Optional[str]] = None,
     penalization_lambda_psi: Grid[Optional[float]] = None,
     penalization_lambda_d: Grid[Optional[float]] = None,
@@ -299,10 +303,14 @@ def fit_sgd_like_cv(
         "loss_fn": _ensure_list(loss_fn),
         "device": _ensure_list(device),
         "patience_early_stopping": _ensure_list(patience_early_stopping),
+        "min_delta_early_stopping": _ensure_list(min_delta_early_stopping),
+        "score_early_stopping": _ensure_list(score_early_stopping),
         "patience_reduceLROnPlateau": _ensure_list(patience_reduceLROnPlateau),
+        "factor_reduceLROnPlateau": _ensure_list(factor_reduceLROnPlateau),
         "penalization_type": _ensure_list(penalization_type),
         "penalization_lambda_psi": _ensure_list(penalization_lambda_psi),
         "penalization_lambda_d": _ensure_list(penalization_lambda_d),
+        "score_reduceLROnPlateau": _ensure_list(score_reduceLROnPlateau)
     }
 
     combinations = _build_combinations(param_grid, grid_mode)
@@ -349,7 +357,11 @@ def fit_sgd_like_cv(
             seed_dataloader=seed_dataloader,
             splitting=splitting,
             patience_early_stopping=combo["patience_early_stopping"],
+            min_delta_early_stopping=combo["min_delta_early_stopping"],
+            score_early_stopping=combo["score_early_stopping"],
             patience_reduceLROnPlateau=combo["patience_reduceLROnPlateau"],
+            factor_reduceLROnPlateau=combo["factor_reduceLROnPlateau"],
+            score_reduceLROnPlateau=combo["score_reduceLROnPlateau"],
             penalization_type=combo["penalization_type"],
             penalization_lambda_psi=combo["penalization_lambda_psi"],
             penalization_lambda_d=combo["penalization_lambda_d"]

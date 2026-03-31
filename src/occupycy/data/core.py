@@ -205,6 +205,11 @@ class OccuData():
             test_ds, batch_size=batch_size, shuffle=False, 
             collate_fn=collate_occu_sites, generator=generator
         ) if n_test else None
+    
+    def reset_dataloaders(self):
+        self.train_loader = None
+        self.val_loader = None
+        self.test_loader = None
         
     def filtered_sites(self, site_id_mask: list) -> "OccuData":
 

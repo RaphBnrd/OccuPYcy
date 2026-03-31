@@ -2,12 +2,50 @@ import torch
 import matplotlib.pyplot as plt
 import polars as pl
 
+def filter_subset_visits(indices_visit_site, n_sites, n_total_visits_max, generator, keep_all_sites=False, seed=None):
+
+    print(f"Subsampling from {indices_visit_site.shape[0]} visits to {n_total_visits_max} visits.")
+
+    if keep_all_sites:
+        print("Keeping all sites, even those with few visits.")
+        assert n_total_visits_max >= n_sites, "If keep_all_sites is True, n_total_visits_max must be at least n_sites."
+        assert (indices_visit_site[1:] >= indices_visit_site[:-1]).all(), "If keep_all_sites is True, indices_visit_site must be sorted by site."
+        # e.g. indices_visit_site might look like: [0, 0, 0, 1, 2, 2, 2, 2, 3, ...] meaning site 0 has 3 visits, site 1 has 1 visits, site 2 has 4 visits, site 3 has 1 visit, etc.
+        mandatory_indices = torch.cat([
+            torch.tensor([0], device=indices_visit_site.device),
+            (indices_visit_site[1:] != indices_visit_site[:-1]).nonzero(as_tuple=True)[0] + 1
+        ])
+        mandatory_visits = indices_visit_site[mandatory_indices]
+        print(f"Number of mandatory visits (one per site): {mandatory_visits.shape[0]}")
+        remaining_mask = torch.ones_like(indices_visit_site, dtype=torch.bool)
+        remaining_mask[mandatory_indices] = False
+        remaining_visits = indices_visit_site[remaining_mask]
+        n_remaining = n_total_visits_max - mandatory_visits.shape[0]
+        print(f"Number of remaining visits to sample: {n_remaining}")
+        if n_remaining > 0 and remaining_visits.numel() > 0:
+            n_sample = min(n_remaining, remaining_visits.shape[0])
+            perm = torch.randperm(remaining_visits.shape[0], generator=generator)
+            sampled_remaining = remaining_visits[perm[:n_sample]]
+            print(f"Number of sampled remaining visits: {sampled_remaining.shape[0]}")
+            indices_visit_site = torch.cat([mandatory_visits, sampled_remaining], dim=0)
+        else:
+            indices_visit_site = mandatory_visits
+    
+    else:
+        print("Without necessarily keeping all sites.")
+        perm = torch.randperm(indices_visit_site.shape[0], generator=generator)
+        indices_visit_site = indices_visit_site[perm[:n_total_visits_max]] # shape: (n_visits_sub,)
+    
+    return indices_visit_site
+
+
 def simulate_constant(
         n_sites=400, 
         n_visits_per_site=25, 
         psi=torch.tensor([0.7, 0.5, 0.1, 0.05]),
         d=torch.tensor([0.01, 0.1, 0.9, 0.99]),
-        seed=None
+        seed=None,
+        verbose=True
     ):
     g = torch.Generator().manual_seed(seed) if seed is not None else None
     n_species = psi.shape[0]
@@ -16,11 +54,18 @@ def simulate_constant(
     z_for_visit = z[indices_visit_site]
     y = torch.bernoulli(d.expand(indices_visit_site.shape[0], n_species), generator=g) * z_for_visit
 
-    print("--- Simulated data summary ---")
-    print(f"  n_sites={n_sites}, n_visits_per_site={n_visits_per_site}, n_species={n_species}")
-    print(f"  true psi={psi}, true d={d}")
-    print(f"  observed psi (knowing true occupancy): {z.mean(dim=0)}")
-    print(f"  observed d (knowing true occupancy):   {y.sum(dim=0) / z_for_visit.sum(dim=0)}")
+    # Plot summary of simulated data
+    if verbose:
+        detected = torch.zeros((n_sites, y.shape[1]), device=y.device, dtype=y.dtype)
+        detected.index_add_(0, indices_visit_site, y)
+        detected = (detected > 0) # shape: (n_sites, n_species)
+        print("--- Simulated data summary ---")
+        print(f"  n_sites={n_sites}, n_visits_per_site={n_visits_per_site}, n_species={n_species}")
+        print(f"  number of detections (per species): {y.sum(dim=0)}")
+        print(f"  number of occupied sites (per species): {detected.sum(dim=0)}")
+        print(f"  range of psi * d: {(psi[indices_visit_site] * d).min():3e} to { (psi[indices_visit_site] * d).max():3e}")
+        print(f"  observed average psi (knowing true occupancy): {z.mean(dim=0)}")
+        print(f"  observed average d (knowing true occupancy):   {y.sum(dim=0) / z_for_visit.sum(dim=0)}")
 
     return y.float(), indices_visit_site.long().tolist(), psi, d, z.mean(dim=0), y.sum(dim=0) / z_for_visit.sum(dim=0)
 
@@ -28,6 +73,7 @@ def simulate_constant(
 def simulate_linear(
         n_sites=400, n_total_visits_max=None,
         f_effort=lambda x1: torch.exp(1.5*x1), 
+        keep_all_sites=False,
         intercept_psi=torch.tensor([0.0]), # shape: (n_species,)
         coefs_psi=torch.tensor([[0.0]]), # shape: (n_species, n_cov_psi)
         intercept_d=torch.tensor([0.0]), # shape: (n_species,)
@@ -41,8 +87,8 @@ def simulate_linear(
     X_psi = torch.randn(n_sites, len(coefs_psi[0]), generator=g)  # shape: (n_sites, n_cov_psi)
     
     # Define the number of visits per site
-    n_visits_per_site = f_effort(X_psi[:, 0])  # shape: (n_sites,)
-    n_visits_per_site = n_visits_per_site.round().long().clamp(min=0)  # shape: (n_sites,)
+    n_visits_per_site = f_effort(X_psi[:, 0]).round().long()  # shape: (n_sites,)
+    n_visits_per_site = n_visits_per_site.clamp(min=int(keep_all_sites))  # shape: (n_sites,) (if keep_all_sites is True, ensure at least 1 visit per site)
     # fig, axes = plt.subplots(1, 2, figsize=(8, 3))
     # axes[0].plot(X_psi[:, 0].cpu(), n_visits_per_site.cpu(), 'o', alpha=0.5)
     # axes[0].set_xlabel("Covariate for occupancy (X_psi[:, 0])")
@@ -54,9 +100,10 @@ def simulate_linear(
     # Filter out sites with zero visits
     if n_total_visits_max is not None: # Randomly subsample visits to have at most n_total_visits_max
         if indices_visit_site.shape[0] > n_total_visits_max:
-            print(f"Subsampling from {indices_visit_site.shape[0]} visits to {n_total_visits_max} visits.")
-            perm = torch.randperm(indices_visit_site.shape[0], generator=g)
-            indices_visit_site = indices_visit_site[perm[:n_total_visits_max]] # shape: (n_visits_sub,)
+            indices_visit_site = filter_subset_visits(
+                indices_visit_site, n_sites, n_total_visits_max, generator=g, 
+                keep_all_sites=keep_all_sites, seed=seed
+            )
     n_visits_per_site = torch.bincount(indices_visit_site, minlength=n_sites)  # shape: (n_sites,) (for each site, how many visits it has)
     # Reassign site indices to be consecutive after filtering
     map_sites_to_sub = {}
@@ -65,10 +112,15 @@ def simulate_linear(
         if n_visits_per_site[i] > 0:
             map_sites_to_sub[i] = curr_idx
             curr_idx += 1
+
     n_sites_sub = curr_idx
-    indices_visit_site = torch.tensor([map_sites_to_sub[idx.item()] for idx in indices_visit_site], dtype=torch.long)  # shape: (n_visits_sub,)
+    mapping = torch.full((n_sites,), -1, dtype=torch.long, device=indices_visit_site.device)
+    keys = torch.tensor(list(map_sites_to_sub.keys()), device=mapping.device)
+    values = torch.tensor(list(map_sites_to_sub.values()), device=mapping.device)
+    mapping[keys] = values
+    indices_visit_site = mapping[indices_visit_site]
     n_visits_sub = indices_visit_site.shape[0]
-    X_psi = X_psi[torch.tensor(list(map_sites_to_sub.keys()))]  # shape: (n_sites_sub, n_cov_psi)
+    X_psi = X_psi[keys]
 
     X_d = torch.randn(n_visits_sub, len(coefs_d[0]), generator=g)  # shape: (n_visits_sub, n_cov_d)
 
@@ -80,11 +132,17 @@ def simulate_linear(
     
     y = torch.bernoulli(d * z_for_visit, generator=g)  # shape: (n_visits_sub, n_species)
 
+    # Plot summary of simulated data
     if verbose:
-        # Plot summary of simulated data
+        detected = torch.zeros((n_sites, y.shape[1]), device=y.device, dtype=y.dtype)
+        detected.index_add_(0, indices_visit_site, y)
+        detected = (detected > 0) # shape: (n_sites, n_species)
         print("--- Simulated data summary ---")
         print(f"  n_sites={n_sites_sub}")
         print(f"  n_visits={n_visits_sub}")
+        print(f"  number of detections (per species): {y.sum(dim=0)}")
+        print(f"  number of occupied sites (per species): {detected.sum(dim=0)}")
+        print(f"  range of psi * d: {(psi[indices_visit_site] * d).min():3e} to { (psi[indices_visit_site] * d).max():3e}")
         print(f"  observed average psi (knowing true occupancy): {z.mean(dim=0)}")
         print(f"  observed average d (knowing true occupancy):   {y.sum(dim=0) / z_for_visit.sum(dim=0)}")
 
@@ -136,6 +194,7 @@ def simulate_non_linear(
         n_cov_psi=2,
         n_cov_d=1,
         f_effort=lambda x1: torch.exp(1.5*x1), 
+        keep_all_sites=False,
         f_psi=lambda X_psi: torch.sigmoid(
             torch.tensor([-1.0, 0.5]) + X_psi @ torch.tensor([[2.0, -1.0], [-1.0, 1.0]]).T
         ), # from X_psi of shape (n_sites, n_cov_psi) to psi of shape (n_sites, n_species)
@@ -151,15 +210,15 @@ def simulate_non_linear(
     X_psi = torch.randn(n_sites, n_cov_psi, generator=g)  # shape: (n_sites, n_cov_psi)
     
     # Define the number of visits per site
-    n_visits_per_site = f_effort(X_psi[:, 0])  # shape: (n_sites,)
-    n_visits_per_site = n_visits_per_site.round().long().clamp(min=0)  # shape: (n_sites,)
+    n_visits_per_site = f_effort(X_psi[:, 0]).round().long()  # shape: (n_sites,)
+    n_visits_per_site = n_visits_per_site.clamp(min=int(keep_all_sites))  # shape: (n_sites,) (if keep_all_sites is True, ensure at least 1 visit per site)
     indices_visit_site = torch.arange(n_sites).repeat_interleave(n_visits_per_site)  # shape: (n_visits,)
     # Filter out sites with zero visits
     if n_total_visits_max is not None: # Randomly subsample visits to have at most n_total_visits_max
         if indices_visit_site.shape[0] > n_total_visits_max:
-            print(f"Subsampling from {indices_visit_site.shape[0]} visits to {n_total_visits_max} visits.")
-            perm = torch.randperm(indices_visit_site.shape[0], generator=g)
-            indices_visit_site = indices_visit_site[perm[:n_total_visits_max]] # shape: (n_visits_sub,)
+            indices_visit_site = filter_subset_visits(
+                indices_visit_site, n_sites, n_total_visits_max, keep_all_sites=keep_all_sites, seed=seed
+            )
     n_visits_per_site = torch.bincount(indices_visit_site, minlength=n_sites)  # shape: (n_sites,) (for each site, how many visits it has)
     # Reassign site indices to be consecutive after filtering
     map_sites_to_sub = {}
@@ -169,26 +228,29 @@ def simulate_non_linear(
             map_sites_to_sub[i] = curr_idx
             curr_idx += 1
     n_sites_sub = curr_idx
-    indices_visit_site = torch.tensor([map_sites_to_sub[idx.item()] for idx in indices_visit_site], dtype=torch.long)  # shape: (n_visits_sub,)
+    mapping = torch.full((n_sites,), -1, dtype=torch.long, device=indices_visit_site.device)
+    keys = torch.tensor(list(map_sites_to_sub.keys()), device=mapping.device)
+    values = torch.tensor(list(map_sites_to_sub.values()), device=mapping.device)
+    mapping[keys] = values
+    indices_visit_site = mapping[indices_visit_site]
     n_visits_sub = indices_visit_site.shape[0]
-    X_psi = X_psi[torch.tensor(list(map_sites_to_sub.keys()))]  # shape: (n_sites_sub, n_cov_psi)
+    X_psi = X_psi[keys]
 
     X_d = torch.randn(n_visits_sub, n_cov_d, generator=g)  # shape: (n_visits_sub, n_cov_d)
 
     psi = f_psi(X_psi)  # shape: (n_sites_sub, n_species)
     z = torch.bernoulli(psi, generator=g)  # shape: (n_sites_sub, n_species)
     z_for_visit = z[indices_visit_site]  # shape: (n_visits_sub, n_species)
-    
+
     d = f_d(X_d)  # shape: (n_visits_sub, n_species)
 
     y = torch.bernoulli(d * z_for_visit, generator=g)  # shape: (n_visits_sub, n_species)
 
-    detected = torch.zeros((n_sites, y.shape[1]), device=y.device, dtype=y.dtype)
-    detected.index_add_(0, indices_visit_site, y)
-    detected = (detected > 0) # shape: (n_sites, n_species)
-
     # Plot summary of simulated data
     if verbose:
+        detected = torch.zeros((n_sites, y.shape[1]), device=y.device, dtype=y.dtype)
+        detected.index_add_(0, indices_visit_site, y)
+        detected = (detected > 0) # shape: (n_sites, n_species)
         print("--- Simulated data summary ---")
         print(f"  n_sites={n_sites_sub}")
         print(f"  n_visits={n_visits_sub}")
@@ -300,6 +362,7 @@ def _from_res_to_dataframe(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, z):
 
 def simulate_linear_dataframe(
         n_sites=400, n_total_visits_max=None,
+        keep_all_sites=False,
         f_effort=lambda x1: torch.exp(1.5*x1), 
         intercept_psi=torch.tensor([0.0]), # shape: (n_species,)
         coefs_psi=torch.tensor([[0.0]]), # shape: (n_species, n_cov_psi)
@@ -313,6 +376,7 @@ def simulate_linear_dataframe(
     y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z = simulate_linear(
         n_sites=n_sites, 
         n_total_visits_max=n_total_visits_max,
+        keep_all_sites=keep_all_sites,
         f_effort=f_effort,
         intercept_psi=intercept_psi,
         coefs_psi=coefs_psi,
@@ -332,6 +396,7 @@ def simulate_non_linear_dataframe(
         n_total_visits_max=None,
         n_cov_psi=2,
         n_cov_d=1,
+        keep_all_sites=False,
         f_effort=lambda x1: torch.exp(1.5*x1), 
         f_psi=lambda X_psi: torch.sigmoid(
             torch.tensor([-1.0, 0.5]) + X_psi @ torch.tensor([[2.0, -1.0], [-1.0, 1.0]]).T
@@ -349,6 +414,7 @@ def simulate_non_linear_dataframe(
         n_total_visits_max=n_total_visits_max,
         n_cov_psi=n_cov_psi,
         n_cov_d=n_cov_d,
+        keep_all_sites=keep_all_sites,
         f_effort=f_effort,
         f_psi=f_psi,
         f_d=f_d,
