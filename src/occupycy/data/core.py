@@ -12,12 +12,20 @@ from torch.utils.data import Dataset, DataLoader, Subset
 
 class OccuData():
     """
-    Canonical data container for the single-season occupancy setup.
-      - y: (n_visits, n_species) with 0/1
-      - visit_site_ids: list of site ids (e.g. names) in for each visit, length n_visits
-      - X_psi: (n_sites, n_cov_psi) optional site/state covariates
-      - X_d: (n_visits, n_cov_d) optional visit/detection covariates
-      - site_ids_in_X_psi: list of site ids corresponding to rows in X_psi, length n_sites. 
+    Canonical data container for single-season occupancy modeling.
+
+    Parameters
+    ----------
+    y : torch.Tensor
+        Visit-level detections, shape ``(n_visits, n_species)``.
+    visit_site_ids : list[int] or list[str]
+        Site identifier per visit.
+    X_psi : torch.Tensor or None, default=None
+        Site covariates, shape ``(n_sites, n_cov_psi)``.
+    X_d : torch.Tensor or None, default=None
+        Visit covariates, shape ``(n_visits, n_cov_d)``.
+    site_ids_in_X_psi : list[int] or list[str] or None, default=None
+        Site IDs aligned with rows of ``X_psi``.
     """
     def __init__(
         self,
@@ -70,6 +78,13 @@ class OccuData():
                 if len(site_ids_in_X_psi) != self.X_psi.shape[0]:
                     raise ValueError(f"site_ids_in_X_psi length ({len(site_ids_in_X_psi)}) must match X_psi first dim ({self.X_psi.shape[0]}).")
 
+        # Initialize splitting with all sites in train by default (can be updated later with build_dataloaders)
+        self.splitting = {
+            "train": list(set(visit_site_ids)),
+            "val": [],
+            "test": []
+        }
+
         # Usefull dimensions    
         self.n_sites = len(set(visit_site_ids))
         self.n_visits = len(visit_site_ids)
@@ -114,6 +129,14 @@ class OccuData():
     
     @property
     def mask_visits_each_site(self):
+        """
+        Visit indices grouped by site index.
+
+        Returns
+        -------
+        list[torch.Tensor]
+            ``i``-th tensor contains visit indices belonging to site ``i``.
+        """
         if self._mask_visits_each_site is None:
             self._mask_visits_each_site = [
                 torch.where(self.indices_visit_site == i)[0]
@@ -127,6 +150,14 @@ class OccuData():
         device: str | torch.device | None = None, 
         dtype: torch.dtype | None = None
     ) -> "OccuData":
+        """
+        Move internal tensors to a given device/dtype.
+
+        Returns
+        -------
+        OccuData
+            This object.
+        """
         def _to(tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
             if tensor is None:
                 return None
@@ -153,7 +184,28 @@ class OccuData():
         device: str | torch.device | None = None,
     ):
         """
-        Returns a new OccuData with train/val/test DataLoaders created from the dataset.
+        Create train/validation/test dataloaders at site level.
+
+        Parameters
+        ----------
+        batch_size : int, default=32
+            Number of sites per batch.
+        val_fraction : float, default=0.0
+            Validation split fraction when ``splitting`` is not provided.
+        test_fraction : float, default=0.0
+            Test split fraction when ``splitting`` is not provided.
+        splitting : dict[str, list] or None, default=None
+            Explicit split with keys ``train``, ``val``, ``test``.
+        shuffle : bool, default=True
+            Whether to shuffle train batches.
+        seed : int or None, default=None
+            Random seed for split/shuffle.
+        device : str or torch.device or None, default=None
+            Optional device move before creating loaders.
+
+        Returns
+        -------
+        None
         """
         if splitting is None:
             assert 0.0 <= val_fraction < 1.0, "val_fraction must be in [0.0, 1.0)"
@@ -177,6 +229,12 @@ class OccuData():
             train_ds, val_ds, test_ds = torch.utils.data.random_split(
                 dataset, [n_train, n_val, n_test], generator=generator
             )
+            # Get the ids corresponding to each split
+            splitting = {
+                "train": [dataset[i]["site_id"] for i in train_ds.indices],
+                "val": [dataset[i]["site_id"] for i in val_ds.indices],
+                "test": [dataset[i]["site_id"] for i in test_ds.indices],
+            }
         else:
             assert set(splitting.keys()) == {"train", "val", "test"}, "splitting keys must be 'train', 'val', 'test'"
             all_idxs = set(range(len(dataset)))
@@ -203,6 +261,8 @@ class OccuData():
             else:
                 test_ds, n_test = None, 0
 
+        self.splitting = splitting
+
         self.train_loader = DataLoader(
             train_ds, batch_size=batch_size, shuffle=shuffle, 
             collate_fn=collate_occu_sites, generator=generator
@@ -219,11 +279,31 @@ class OccuData():
         ) if n_test else None
     
     def reset_dataloaders(self):
+        """
+        Clear train/validation/test dataloaders.
+
+        Returns
+        -------
+        None
+        """
         self.train_loader = None
         self.val_loader = None
         self.test_loader = None
         
     def filtered_sites(self, site_id_mask: list) -> "OccuData":
+        """
+        Return a new ``OccuData`` restricted to selected site IDs.
+
+        Parameters
+        ----------
+        site_id_mask : list
+            Site IDs to keep.
+
+        Returns
+        -------
+        OccuData
+            Filtered dataset.
+        """
 
         if len(site_id_mask) != len(set(site_id_mask)):
             print("Warning: site_mask contains duplicate indices. Duplicates are ignored.")
@@ -295,10 +375,29 @@ class OccuSiteDataset(Dataset):
         self.site_ids = list(data.mapping_site_idx.keys())
 
     def __len__(self):
+        """
+        Number of sites.
+
+        Returns
+        -------
+        int
+        """
         return self.data.n_sites
 
     def __getitem__(self, idx):
+        """
+        Fetch one site sample with all associated visits.
 
+        Parameters
+        ----------
+        idx : int
+            Site position.
+
+        Returns
+        -------
+        dict
+            Dictionary with keys ``site_id``, ``y``, ``X_d``, ``X_psi``.
+        """
         site_id = self.site_ids[idx] # site_id is the original site id (name)
         idx_site = self.data.mapping_site_idx[site_id] # scalar index corresponding to site_id in X_psi
 

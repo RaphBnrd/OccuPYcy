@@ -3,7 +3,14 @@ import matplotlib.pyplot as plt
 import polars as pl
 
 def filter_subset_visits(indices_visit_site, n_sites, n_total_visits_max, generator, keep_all_sites=False):
+    """
+    Subsample visit-to-site indices with optional one-visit-per-site guarantee.
 
+    Returns
+    -------
+    torch.Tensor
+        Subsampled ``indices_visit_site``.
+    """
     print(f"Subsampling from {indices_visit_site.shape[0]} visits to {n_total_visits_max} visits.")
 
     if keep_all_sites:
@@ -47,6 +54,14 @@ def simulate_constant(
         seed=None,
         verbose=True
     ):
+    """
+    Simulate intercept-only occupancy/detection data.
+
+    Returns
+    -------
+    tuple
+        ``(y, visit_site_ids, psi, d, psi_obs, d_obs)``.
+    """
     g = torch.Generator().manual_seed(seed) if seed is not None else None
     n_species = psi.shape[0]
     z = torch.bernoulli(psi.expand(n_sites, n_species), generator=g)
@@ -82,6 +97,14 @@ def simulate_linear(
         verbose=True, 
         plot_summary=True
     ):
+    """
+    Simulate occupancy data from linear logits for psi and d.
+
+    Returns
+    -------
+    tuple
+        ``(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, z)``.
+    """
     g = torch.Generator().manual_seed(seed) if seed is not None else None
 
     X_psi = torch.randn(n_sites, len(coefs_psi[0]), generator=g)  # shape: (n_sites, n_cov_psi)
@@ -205,6 +228,14 @@ def simulate_non_linear(
         plot_summary=True,
         verbose=True
     ):
+    """
+    Simulate occupancy data using user-defined nonlinear ``f_psi`` and ``f_d``.
+
+    Returns
+    -------
+    tuple
+        ``(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, z)``.
+    """
     g = torch.Generator().manual_seed(seed) if seed is not None else None
 
     X_psi = torch.randn(n_sites, n_cov_psi, generator=g)  # shape: (n_sites, n_cov_psi)
@@ -319,6 +350,14 @@ def simulate_non_linear(
     return y.float(), visit_site_ids, site_ids_in_X_psi, X_psi.float(), X_d.float(), z.float()
 
 def _from_res_to_dataframe(y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, z):
+    """
+    Convert simulation outputs to visit-level and site-level Polars dataframes.
+
+    Returns
+    -------
+    tuple[polars.DataFrame, polars.DataFrame]
+        ``(df_visit, df_site)``.
+    """
 
     # * * * Visit dataframe * * *
 
@@ -373,6 +412,14 @@ def simulate_linear_dataframe(
         verbose=True,
         plot_summary=True
     ):
+    """
+    Simulate linear occupancy data and return dataframes.
+
+    Returns
+    -------
+    tuple[polars.DataFrame, polars.DataFrame]
+        ``(df_visit, df_site)``.
+    """
     
     y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z = simulate_linear(
         n_sites=n_sites, 
@@ -409,6 +456,14 @@ def simulate_non_linear_dataframe(
         plot_summary=True,
         verbose=True
     ):
+    """
+    Simulate nonlinear occupancy data and return dataframes.
+
+    Returns
+    -------
+    tuple[polars.DataFrame, polars.DataFrame]
+        ``(df_visit, df_site)``.
+    """
 
     y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z = simulate_non_linear(
         n_sites=n_sites, 

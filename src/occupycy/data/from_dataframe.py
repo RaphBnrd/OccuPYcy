@@ -2,8 +2,6 @@ import torch
 import pandas as pd
 import polars as pl
 
-from occupycy.data import OccuData
-
 def data_from_dataframe(
         *,
         df_visit: pd.DataFrame | pl.DataFrame, 
@@ -17,13 +15,35 @@ def data_from_dataframe(
         verbose: bool = False
 ) -> dict:
     """
-    Create the data dictionary needed to create an OccuData object from pandas or polars DataFrames containing the visit-level and site-level data.
+    Build an ``OccuData`` constructor payload from visit/site dataframes.
+
+    Parameters
+    ----------
+    df_visit : pandas.DataFrame or polars.DataFrame
+        Visit-level table (detections and optional visit covariates).
+    df_site : pandas.DataFrame or polars.DataFrame or None, default=None
+        Site-level table (optional occupancy covariates).
+    col_visit_site_ids : str, default="visit_site_id"
+        Site-id column in ``df_visit``.
+    col_site_ids_in_X_psi : str or None, default="site_id"
+        Site-id column in ``df_site``.
+    cols_y : list[str] or None, default=None
+        Detection columns.
+    cols_covars_d : list[str] or None, default=None
+        Detection covariate columns.
+    cols_covars_psi : list[str] or None, default=None
+        Occupancy covariate columns.
+    device : torch.device
+        Output tensor device.
+    verbose : bool, default=False
+        If ``True``, prints shape summary.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys ``y``, ``visit_site_ids``, ``site_ids_in_X_psi``,
+        ``X_psi``, and ``X_d``.
     """
-    # # Convert to polars if input is pandas DataFrame
-    # if isinstance(df_visit, pd.DataFrame):
-    #     df_visit = pl.from_pandas(df_visit)
-    # if df_site is not None and isinstance(df_site, pd.DataFrame):
-    #     df_site = pl.from_pandas(df_site)
     if not isinstance(df_visit, (pd.DataFrame, pl.DataFrame)):
         raise ValueError("df_visit must be a pandas or polars DataFrame")
     if df_site is not None and not isinstance(df_site, (pd.DataFrame, pl.DataFrame)):
@@ -72,7 +92,7 @@ def data_from_dataframe(
             site_ids_in_X_psi = df_site.select(col_site_ids_in_X_psi).to_series().to_list() # Update site_ids_in_X_psi after filtering
     
     # Define X_psi
-    if cols_covars_psi is None:
+    if cols_covars_psi is None or len(cols_covars_psi) == 0:
         X_psi = None
     else:
         if isinstance(df_site, pd.DataFrame):
@@ -81,7 +101,7 @@ def data_from_dataframe(
             X_psi = torch.tensor(df_site.select(cols_covars_psi).to_numpy(), dtype=torch.float32, device=device) # shape: (n_sites_in_X_psi, n_cov_psi)
     
     # Define X_d
-    if cols_covars_d is None:
+    if cols_covars_d is None or len(cols_covars_d) == 0:
         X_d = None
     else:
         if isinstance(df_visit, pd.DataFrame):
