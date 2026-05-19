@@ -16,11 +16,39 @@ T = TypeVar("T")
 Grid = T | list[T] | tuple[T, ...]
 
 def _ensure_list(x):
+    """
+    Normalize a scalar or sequence to a list.
+
+    Parameters
+    ----------
+    x : Any
+        Input value.
+
+    Returns
+    -------
+    list
+        ``x`` as a list.
+    """
     if isinstance(x, (list, tuple)):
         return list(x)
     return [x]
 
 def _build_combinations(param_grid, grid_mode):
+    """
+    Build hyperparameter combinations from a grid.
+
+    Parameters
+    ----------
+    param_grid : dict[str, list]
+        Parameter grid.
+    grid_mode : {"combine_all", "match_by_index"}
+        Combination strategy.
+
+    Returns
+    -------
+    list[dict]
+        List of parameter combinations.
+    """
     keys = list(param_grid.keys())
     
     if grid_mode == "combine_all":
@@ -53,7 +81,14 @@ def _prepare_splitting(
         data: OccuData,
         splitting: Optional[Dict[str, list]]
     ) -> Tuple[OccuData, OccuData]:
-    
+    """
+    Validate split dictionary and create train/validation subsets.
+
+    Returns
+    -------
+    tuple[OccuData, OccuData]
+        ``(data_train, data_val)``.
+    """    
     if not isinstance(splitting, dict) or "train" not in splitting or "val" not in splitting:
         raise ValueError("Splitting must be a dictionary with 'train' and 'val' keys containing lists of site ids.")
     if not isinstance(splitting["train"], list) or not isinstance(splitting["val"], list):
@@ -74,15 +109,21 @@ def compute_criterion(
     criterion_for_best: str,
 ) -> float:
     """
-    Compute the criterion for the given model and validation data.
+    Compute model selection criterion on validation data.
 
-    Args:
-        model: The model to evaluate.
-        data_val: The validation data.
-        criterion_for_best: The criterion to compute.
+    Parameters
+    ----------
+    model : OccuModel
+        Fitted model.
+    data_val : OccuData
+        Validation dataset.
+    criterion_for_best : str
+        Criterion name.
 
-    Returns:
-        The computed criterion.
+    Returns
+    -------
+    float
+        Criterion value.
     """
     model.eval()
     with torch.no_grad():
@@ -133,14 +174,65 @@ def fit_lbfgs_full_batch_cv(
     penalization_lambda_d: Grid[Optional[float]] = None,
     # Additional args
     criterion_for_best: str = "val_nll_logits",
-    verbose: bool = True
+    verbose: str = "all"
 ) -> Tuple[FitResult, OccuModel, pl.DataFrame, list, list]:
     """
-    Perform cross-validation for the L-BFGS full-batch fitting procedure.
+    Run hyperparameter search for full-batch L-BFGS fitting.
 
+    Parameters
+    ----------
+    data : OccuData
+        Dataset to fit (contains observations, covariates and mappings).
+    splitting : dict or None
+        Dictionary with keys ``'train'`` and ``'val'`` mapping to lists of site ids
+        used to create the training and validation splits.
+    grid_mode : str
+        Combination strategy for the hyperparameter grid. One of
+        ``'combine_all'`` or ``'match_by_index'``.
+    model : OccuModel or sequence of OccuModel
+        Model instance or iterable of model instances to evaluate during CV.
+    max_iter : int or sequence, optional
+        Maximum number of L-BFGS iterations (or grid values).
+    lr : float or sequence, optional
+        Learning rate(s) for the optimizer.
+    tolerance_grad : float or None or sequence, optional
+        Gradient tolerance(s) for termination.
+    tolerance_change : float or None or sequence, optional
+        Change-in-parameter tolerance(s) for termination.
+    history_size : int or None or sequence, optional
+        L-BFGS history size(s).
+    line_search_fn : str or None or sequence, optional
+        Line search function name(s) passed to the L-BFGS solver.
+    site_reduction : str or sequence, optional
+        Reduction mode over sites (e.g. ``'sum'``).
+    species_reduction : str or sequence, optional
+        Reduction mode over species (e.g. ``'mean'``).
+    loss_fn : callable or sequence, optional
+        Loss function(s) to use for fitting (default: ``nll_logits``).
+    device : torch.device or None or sequence, optional
+        Device(s) to run fitting on (CPU or CUDA device).
+    penalization_type : str or None or sequence, optional
+        Penalization type(s) (e.g. ``'l2'``) or ``None`` for no penalization.
+    penalization_lambda_psi : float or None or sequence, optional
+        Penalization strength(s) applied to psi parameters.
+    penalization_lambda_d : float or None or sequence, optional
+        Penalization strength(s) applied to detection parameters.
+    criterion_for_best : str, optional
+        Criterion used to select the best hyperparameters on validation data
+        (default: ``'val_nll_logits'``).
+    verbose : str, optional
+        Verbosity level, one of ``'all'``, ``'summary'`` or ``'none'``.
+
+    Returns
+    -------
+    tuple[FitResult, OccuModel, polars.DataFrame, list, list]
+        Best fit result, best model, results table, all fit results, all models.
+    
+    Notes
+    -----
     Doesn't modify the model. 
-
     Splitting shout contain keys 'train' and 'val' with lists site ids.
+    More details in the docstring of ``fit_lbfgs_full_batch``.
     """
 
     # Prepare hyperparameter grid
@@ -176,7 +268,7 @@ def fit_lbfgs_full_batch_cv(
         
         this_model = deepcopy(from_modelname_to_model[combo["model_name"]])
         
-        if verbose:
+        if verbose == "all":
             print(f"\n ==== Fitting n°{idx_combo+1}/{len(combinations)} ====")
             for k, v in combo.items():
                 print(f"  {k}: {v}")
@@ -221,7 +313,7 @@ def fit_lbfgs_full_batch_cv(
         new_row[criterion_for_best] = criterion
         df_results.append(new_row)
 
-        if verbose:
+        if verbose == "all":
             print(f"> {criterion_for_best}: {criterion:.4f}")
 
     df_results = pl.DataFrame(df_results)
@@ -231,7 +323,7 @@ def fit_lbfgs_full_batch_cv(
     best_fit_result = all_fit_results[best_idx]
     best_model = all_fitted_models[best_idx]
 
-    if verbose:
+    if verbose == "all" or verbose == "summary":
         df_print = deepcopy(df_results)
         for col_func in ["loss_fn"]:
             df_print = df_print.with_columns(pl.Series(
@@ -278,14 +370,79 @@ def fit_sgd_like_cv(
     # Additional args
     seed_dataloader: Optional[int] = None,
     criterion_for_best: str = "val_nll_logits",
-    verbose: bool = True
+    verbose: str = "all"
 ) -> Tuple[FitResult, OccuModel, pl.DataFrame, list, list]:
     """
-    Perform cross-validation for the SGD-style mini-batch fitting procedure.
+    Run hyperparameter search for SGD-like mini-batch fitting.
 
+    Parameters
+    ----------
+    data : OccuData
+        Dataset to fit (contains observations, covariates and mappings).
+    splitting : dict or None
+        Dictionary with keys ``'train'`` and ``'val'`` mapping to lists of site ids
+        used to create the training and validation splits.
+    grid_mode : str
+        Combination strategy for the hyperparameter grid. One of
+        ``'combine_all'`` or ``'match_by_index'``.
+    model : OccuModel or sequence of OccuModel
+        Model instance or iterable of model instances to evaluate during CV.
+    batch_size : int or sequence, optional
+        Mini-batch size(s) used for training.
+    n_epochs : int or sequence, optional
+        Number of epochs (or grid values) for training.
+    lr_psi : float or sequence, optional
+        Learning rate(s) for the occupancy (`psi`) parameters.
+    lr_d : float or sequence, optional
+        Learning rate(s) for the detection (`d`) parameters.
+    optimizer_psi_cls : callable or sequence, optional
+        Optimizer class(es) for psi parameters (e.g. ``torch.optim.Adam``).
+    optimizer_d_cls : callable or sequence, optional
+        Optimizer class(es) for detection parameters.
+    site_reduction : str or sequence, optional
+        Reduction mode over sites (e.g. ``'sum'``).
+    species_reduction : str or sequence, optional
+        Reduction mode over species (e.g. ``'mean'``).
+    loss_fn : callable or sequence, optional
+        Loss function(s) to use for fitting (default: ``nll_logits``).
+    device : torch.device or None or sequence, optional
+        Device(s) to run fitting on (CPU or CUDA device).
+    patience_early_stopping : int or None or sequence, optional
+        Patience value(s) for early stopping (in epochs) or ``None`` to disable.
+    min_delta_early_stopping : float or None or sequence, optional
+        Minimum change to qualify as improvement for early stopping.
+    score_early_stopping : str or sequence, optional
+        Score name used to monitor early stopping (e.g. ``'val_loss'``).
+    patience_reduceLROnPlateau : int or None or sequence, optional
+        Patience for reducing the learning rate on plateau.
+    factor_reduceLROnPlateau : float or sequence, optional
+        Multiplicative factor for reducing the learning rate.
+    score_reduceLROnPlateau : str or sequence, optional
+        Score name used to monitor ReduceLROnPlateau.
+    penalization_type : str or None or sequence, optional
+        Penalization type(s) (e.g. ``'l2'``) or ``None`` for no penalization.
+    penalization_lambda_psi : float or None or sequence, optional
+        Penalization strength(s) applied to psi parameters.
+    penalization_lambda_d : float or None or sequence, optional
+        Penalization strength(s) applied to detection parameters.
+    seed_dataloader : int or None, optional
+        Seed used to initialise dataloaders for reproducible shuffling.
+    criterion_for_best : str, optional
+        Criterion used to select the best hyperparameters on validation data
+        (default: ``'val_nll_logits'``).
+    verbose : str, optional
+        Verbosity level, one of ``'all'``, ``'summary'`` or ``'none'``.
+
+    Returns
+    -------
+    tuple[FitResult, OccuModel, polars.DataFrame, list, list]
+        Best fit result, best model, results table, all fit results, all models.
+    
+    Notes
+    -----
     Doesn't modify the model. 
-
     Splitting shout contain keys 'train' and 'val' with lists site ids.
+    More details in the docstring of ``fit_sgd_like``.
     """
 
     # Prepare hyperparameter grid
@@ -327,7 +484,7 @@ def fit_sgd_like_cv(
         
         this_model = deepcopy(from_modelname_to_model[combo["model_name"]])
         
-        if verbose:
+        if verbose == "all":
             print(f"\n ==== Fitting n°{idx_combo+1}/{len(combinations)} ====")
             for k, v in combo.items():
                 print(f"  {k}: {v}")
@@ -383,7 +540,7 @@ def fit_sgd_like_cv(
         new_row[criterion_for_best] = criterion
         df_results.append(new_row)
 
-        if verbose:
+        if verbose == "all":
             print(f"> {criterion_for_best}: {criterion:.4f}")
 
     df_results = pl.DataFrame(df_results)
@@ -393,7 +550,7 @@ def fit_sgd_like_cv(
     best_fit_result = all_fit_results[best_idx]
     best_model = all_fitted_models[best_idx]
 
-    if verbose:
+    if verbose == "all" or verbose == "summary":
         df_print = deepcopy(df_results)
         for col_func in ["loss_fn", "optimizer_psi_cls", "optimizer_d_cls"]:
             df_print = df_print.with_columns(pl.Series(

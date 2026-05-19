@@ -13,7 +13,22 @@ def fit_naive_estimator(
     device: Optional[torch.device] = None,
 ) -> FitResult:
     """
-    Naive estimator fitting for any OccuModel.
+    Fit a constant occupancy model as a naive baseline.
+
+    Parameters
+    ----------
+    data : OccuData
+        Input dataset.
+    loss_fn : callable, default=nll_logits
+        Loss function used by LBFGS.
+    device : torch.device or None, default=None
+        Target device.
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor, ConstantOccuModel, FitResult]
+        ``(logit_psi, logit_d, model, fit_result)`` where logits are shape
+        ``(n_species,)``.
     """
 
     print("Fitting naive estimator...")

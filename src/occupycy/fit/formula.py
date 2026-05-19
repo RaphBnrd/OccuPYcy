@@ -1,6 +1,31 @@
 import torch
 
 def build_design_matrix_from_formula(X_ini, formula, covars, verbose=False):
+    """
+    Build a transformed design matrix from a simple symbolic formula.
+
+    Parameters
+    ----------
+    X_ini : torch.Tensor
+        Original matrix of shape ``(n_samples, n_covariates)``.
+    formula : str
+        Comma-separated expressions, each optionally using products ``*``,
+        powers ``^``, and absolute values ``|x|``.
+    covars : list[str]
+        Covariate names aligned with columns of ``X_ini``.
+    verbose : bool, default=False
+        If ``True``, print parsing details.
+
+    Returns
+    -------
+    tuple[torch.Tensor, list[str]]
+        New design matrix and generated column names.
+
+    Raises
+    ------
+    ValueError
+        If a covariate is unknown or a fractional power is used without absolute value.
+    """
 
     X_new = torch.empty(X_ini.shape[0], 0, dtype=X_ini.dtype, device=X_ini.device) # Start with an empty design matrix
     # Split the formula by ',' and strip whitespace to get the new column names

@@ -4,12 +4,14 @@ from typing import Callable, Optional
 
 import torch
 from tqdm import tqdm
+from copy import deepcopy
 
 from .result import FitResult
 from occupycy.data import OccuData
 from occupycy.likelihood import nll_logits
 from occupycy.models import OccuModel
 from occupycy.likelihood.penalty import loss_penalty
+from .checkpoints import save_checkpoint_if_best
 
 
 def fit_lbfgs_full_batch(
@@ -25,25 +27,77 @@ def fit_lbfgs_full_batch(
     site_reduction: str = "sum",
     species_reduction: str = "mean",
     loss_fn: Callable[..., torch.Tensor] = nll_logits,
+    loss_fn_eval: Optional[Callable[..., torch.Tensor]] = None,
     device: Optional[torch.device] = None,
     penalization_type: Optional[str] = None,
     penalization_lambda_psi: Optional[float] = None,
-    penalization_lambda_d: Optional[float] = None
+    penalization_lambda_d: Optional[float] = None,
+    path_checkpoints: Optional[str] = None
 ) -> FitResult:
     """
-    General full-batch LBFGS fitting for any OccuModel.
+    Fit an occupancy model with full-batch L-BFGS.
 
-    It modifies the model in-place.
+    Parameters
+    ----------
+    data : OccuData
+        Input dataset.
+    model : OccuModel
+        Model to optimize (modified in place).
+    max_iter : int, default=200
+        Maximum L-BFGS iterations.
+    lr : float, default=1.0
+        L-BFGS learning rate.
+    tolerance_grad : float or None, default=None
+        L-BFGS convergence criterion on gradient norm.
+    tolerance_change : float or None, default=None
+        L-BFGS convergence criterion on loss change.
+    history_size : int or None, default=None
+        L-BFGS history size for approximating inverse Hessian.
+    line_search_fn : str or None, default=None
+        Line search method for L-BFGS ("strong_wolfe", "backtracking", etc.).
+    site_reduction : str, default="sum"
+        Reduction method for aggregating loss over sites ("sum", "mean", etc.).
+    species_reduction : str, default="mean"
+        Reduction method for aggregating loss over species ("sum", "mean", etc.).
+    loss_fn : callable, default=nll_logits
+        Loss function used by LBFGS.
+    loss_fn_eval : callable or None, default=None
+        Optional loss function for evaluation at each iteration (if different from loss_fn).
+         If provided, eval loss is computed at each iteration and stored in history as 'val_loss'.
+         If None, no eval loss is computed.
+    device : torch.device or None, default=None
+        Target device for computation. If None, uses model's parameter device.
+    penalization_type : str or None, default=None
+        Type of penalization to apply to the loss (e.g., "l2_logits", "l1_logits", "l2_logits_naive", "l1_logits_naive").
+    penalization_lambda_psi : float or None, default=None
+        Strength of penalization for occupancy logits (used if penalization_type is not None).
+    penalization_lambda_d : float or None, default=None
+        Strength of penalization for detection logits (used if penalization_type is not None).
+    path_checkpoints : str or None, default=None
+        Path where checkpoint is saved.
 
-    Requirements on the model:
-      - model.forward_logits(X_psi=..., X_d=...) returns (logit_psi, logit_d)
-      - logit_psi shape: (n_sites, n_species)
-      - logit_d shape: (n_visits, n_species)
+    Returns
+    -------
+    FitResult
+        Fitting summary and train-loss history.
+
+    Raises
+    ------
+    ValueError
+        If inputs are empty, model outputs have invalid shapes, or loss is non-finite.
+
+    Notes
+    -----
+    The model is modified in-place. 
     """
-
     if device is None:
         device = next(model.psi_model.parameters()).device
-    
+
+    eval_loss = False
+    if loss_fn_eval is not None and loss_fn_eval != loss_fn:
+        eval_loss = True
+        print("Evaluation loss function provided; will compute eval loss at each iteration. Stored in history as 'val_loss'.")
+
     data.to(device=device)
     model.to(device=device)
 
@@ -81,20 +135,27 @@ def fit_lbfgs_full_batch(
         lbfgs_kwargs["history_size"] = history_size
     if line_search_fn is not None:
         lbfgs_kwargs["line_search_fn"] = line_search_fn
-
-    opt = torch.optim.LBFGS(
-        list(model.psi_model.parameters()) + list(model.d_model.parameters()),
-        lr=lr, **lbfgs_kwargs
-    )
+    
+    
+    parameters = list(model.psi_model.parameters()) + list(model.d_model.parameters())
+    parameters = [p for p in parameters if p.requires_grad]
+    if len(parameters) == 0:
+        raise ValueError("No parameters to optimize. Ensure that model parameters have requires_grad=True.")
+    opt = torch.optim.LBFGS(parameters, lr=lr, **lbfgs_kwargs)
 
     # Closure function for LBFGS optimization
     n_iter = 0
     last_loss = None
     train_loss_history = []
+    eval_loss_history = []
     pbar = None
 
     def closure():
-        nonlocal n_iter, last_loss, train_loss_history, pbar
+
+        nonlocal n_iter, last_loss, train_loss_history, eval_loss_history, \
+            pbar, path_checkpoints, model, opt, lr
+
+        
         if n_iter == 0:
             pbar = tqdm(total=max_iter, desc="LBFGS iterations", unit="iter")
         opt.zero_grad(set_to_none=True)
@@ -151,9 +212,40 @@ def fit_lbfgs_full_batch(
         last_loss = loss.detach()
         n_iter += 1
         train_loss_history.append(float(last_loss.cpu().item()))
+        
+        if eval_loss:
+            this_eval_loss = loss_fn_eval(
+                y,
+                logit_psi=logit_psi,
+                logit_d=logit_d,
+                indices_visit_site=indices_visit_site,
+                site_reduction=site_reduction,
+                species_reduction=species_reduction,
+            ).detach()
+            eval_loss_history.append(float(this_eval_loss.cpu().item()))
 
         pbar.set_postfix({"train_loss": last_loss.cpu().item()})
         pbar.update(1)
+
+        # Save the checkpoint
+        save_checkpoint_if_best(
+            path_checkpoints=path_checkpoints,
+            epoch=n_iter-1,
+            last_train_loss=last_loss,
+            last_val_loss=None,
+            final_params_model_psi=deepcopy(model.psi_model.state_dict()),
+            final_params_model_d=deepcopy(model.d_model.state_dict()),
+            opt_psi=None,
+            opt_d=None,
+            opt=opt,
+            optimizer_psi_cls=torch.optim.LBFGS,
+            optimizer_d_cls=torch.optim.LBFGS,
+            train_loss_history=train_loss_history,
+            val_loss_history=eval_loss_history,
+            lr_psi_history=[lr] * n_iter,
+            lr_d_history=[lr] * n_iter,
+            verbose=False
+        )
 
         return loss
 
@@ -166,13 +258,33 @@ def fit_lbfgs_full_batch(
 
     final = last_loss if last_loss is not None else loss.detach()
 
+    save_checkpoint_if_best(
+        path_checkpoints=path_checkpoints,
+        # splitting=data.splitting,
+        epoch=n_iter-1,
+        last_train_loss=last_loss,
+        last_val_loss=None,
+        final_params_model_psi=deepcopy(model.psi_model.state_dict()),
+        final_params_model_d=deepcopy(model.d_model.state_dict()),
+        opt_psi=None,
+        opt_d=None,
+        opt=opt,
+        optimizer_psi_cls=torch.optim.LBFGS,
+        optimizer_d_cls=torch.optim.LBFGS,
+        train_loss_history=train_loss_history,
+        val_loss_history=eval_loss_history,
+        lr_psi_history=[lr] * n_iter,
+        lr_d_history=[lr] * n_iter,
+        verbose=False
+    )
+
     # LBFGS doesn't expose a robust convergence flag; keep best-effort.
     return FitResult(
         final_train_loss=float(final.cpu().item()), 
         final_val_loss=None,
         n_epochs=n_iter, 
         converged=True,
-        history={"train_loss": train_loss_history},
+        history={"train_loss": train_loss_history, "val_loss": eval_loss_history},
         lr_psi=lr,
         lr_d=lr,
         optimizer_psi="LBFGS",

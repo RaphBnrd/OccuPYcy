@@ -19,6 +19,34 @@ def save_checkpoint_if_best(
     lr_d_history: list[float],
     verbose: bool,
 ):
+    """
+    Save training state to disk if checkpointing is enabled.
+
+    Parameters
+    ----------
+    path_checkpoints : str
+        Destination ``.pt`` file path. If ``None``, nothing is saved.
+    epoch : int
+        Epoch/iteration index.
+    last_train_loss, last_val_loss : float
+        Latest losses.
+    final_params_model_psi, final_params_model_d : dict
+        Model state dictionaries.
+    opt_psi, opt_d, opt : torch.optim.Optimizer or None
+        Optimizer instances.
+    optimizer_psi_cls, optimizer_d_cls : type
+        Optimizer classes used during training.
+    train_loss_history, val_loss_history : list[float]
+        Recorded losses.
+    lr_psi_history, lr_d_history : list[float]
+        Learning-rate histories.
+    verbose : bool
+        If ``True``, prints save message.
+
+    Returns
+    -------
+    None
+    """
                     
     if path_checkpoints is not None:
         
@@ -52,10 +80,10 @@ def save_checkpoint_if_best(
             "val_loss_history": val_loss_history,
 
             # Learning rates
-            "lr_psi": lr_psi_history[-1],
-            "lr_d": lr_d_history[-1],
+            "lr_psi_history": lr_psi_history,
+            "lr_d_history": lr_d_history,
 
-            # 🔹 Small but useful additions
+            # Small but useful additions
             "rng_state": torch.get_rng_state(),
             "cuda_rng_state": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
         }

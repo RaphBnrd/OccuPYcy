@@ -24,6 +24,34 @@ def forward_path_one_batch(
     species_reduction: str,
     device: torch.device
 ):
+    """
+    Compute forward pass and loss for one batch.
+
+    Parameters
+    ----------
+    batch : dict
+        Batched data from ``collate_occu_sites``.
+    model : OccuModel
+        Occupancy model.
+    loss_fn : callable
+        Loss function (typically ``nll_logits``).
+    site_reduction : str
+        Reduction over sites.
+    species_reduction : str
+        Reduction over species.
+    device : torch.device
+        Device used for computation.
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        ``(loss, logit_psi, logit_d)``.
+
+    Raises
+    ------
+    ValueError
+        If computed loss is non-finite.
+    """
     y = batch["y"].to(device=device) # shape: (n_visits, n_species)
     indices_visit_site = batch["indices_visit_site"].to(device=device)
     X_psi = batch["X_psi"] # shape: (n_sites, n_cov_psi) or None
@@ -74,6 +102,7 @@ def fit_sgd_like(
     site_reduction: str = "sum",
     species_reduction: str = "mean",
     loss_fn: Callable[..., torch.Tensor] = nll_logits,
+    loss_fn_eval: Optional[Callable[..., torch.Tensor]] = None,
     device: Optional[torch.device] = None,
     seed_dataloader: Optional[int] = None,
     val_fraction: float = 0.0,
@@ -91,16 +120,82 @@ def fit_sgd_like(
     path_checkpoints: Optional[str] = None
 ) -> FitResult:
     """
-    Mini-batch SGD-style fitting for any OccuModel.
+    Fit an occupancy model with mini-batch SGD-like optimization.
 
-    It modifies the model in-place.
+    Parameters
+    ----------
+    data : OccuData
+        Input data.
+    model : OccuModel
+        Model to optimize (modified in place).
+    batch_size : int, default=256
+        Number of sites per batch.
+    n_epochs : int, default=50
+        Maximum number of epochs.
+    lr_psi : float, default=1e-3
+        Learning rate for occupancy parameters.
+    lr_d : float, default=1e-3
+        Learning rate for detection parameters.
+    optimizer_psi_cls, optimizer_d_cls : callable, default=torch.optim.Adam
+        Optimizer classes for occupancy and detection branches.
+    site_reduction : str, default="sum"
+        Reduction over sites for the loss ("sum", "mean", or "none").
+    species_reduction : str, default="mean"
+        Reduction over species for the loss ("sum", "mean", or "none").
+    loss_fn : callable, default=nll_logits
+        Loss function to optimize.
+    loss_fn_eval : callable or None, default=None
+        Loss function for validation. If None, uses loss_fn.
+    device : torch.device or None, default=None
+        Device for computation. If None, uses the device of the model parameters.
+    seed_dataloader : int or None, default=None
+        Random seed for dataloader shuffling.
+    val_fraction : float, default=0.0
+        Fraction of data to use for validation if no val_loader is provided.
+    test_fraction : float, default=0.0
+        Fraction of data to use for testing if no test_loader is provided.
+    splitting : dict or None, default=None
+        Explicit splitting of sites into "train", "val", and "test" lists. Overrides val_fraction and test_fraction if provided.
+    patience_early_stopping : int or None, default=None
+        Number of epochs with no improvement after which training will be stopped. If None, no early stopping is performed.
+    min_delta_early_stopping : float, default=0.0
+        Minimum change in the monitored score to qualify as an improvement for early stopping.
+    score_early_stopping : str, default="val_loss"
+        Score to monitor for early stopping ("val_loss" or "train_loss").
+    patience_reduceLROnPlateau : int or None, default=None
+        Number of epochs with no improvement after which learning rate will be reduced. If None, no learning rate scheduling is performed.
+    factor_reduceLROnPlateau : float, default=0.5
+        Factor by which the learning rate will be reduced when using ReduceLROnPlateau.
+    score_reduceLROnPlateau : str, default="val_loss"
+        Score to monitor for ReduceLROnPlateau ("val_loss" or "train_loss").
+    penalization_type : str or None, default=None
+        Type of penalization to apply ("l2_params", "l1_params", "l2_logits", "l1_logits", "l2_logits_naive", "l1_logits_naive", or None).
+    penalization_lambda_psi : float or None, default=None
+        Strength of penalization for occupancy parameters (used if penalization_type is "l2_params" or "l1_params").
+    penalization_lambda_d : float or None, default=None
+        Strength of penalization for detection parameters (used if penalization_type is "l2_params" or "l1_params").
+    path_checkpoints : str or None, default=None
+        Path where best checkpoint is saved.
 
-    Penalty implementations:
-    [None, "l2_params", "l1_params", "l2_logits", "l1_logits", "l2_logits_naive", "l1_logits_naive"]
+    Returns
+    -------
+    FitResult
+        Training summary and history.
+
+    Notes
+    -----
+    Supported penalties:
+    ``None, l2_params, l1_params, l2_logits, l1_logits, l2_logits_naive, l1_logits_naive``.
+    The model is modified in-place. 
+    If using early stopping, the best model is loaded at the end. 
+    Otherwise, the final model is returned.
     """
 
     if device is None:
         device = next(model.psi_model.parameters()).device
+
+    if loss_fn_eval is None:
+        loss_fn_eval = loss_fn
 
     # Build dataloader (sites batched)
     if data.train_loader is None:
@@ -122,7 +217,7 @@ def fit_sgd_like(
     # Penalization setup
     if penalization_type in ["l2_logits_naive", "l1_logits_naive"]:
         center_logit_psi, center_logit_d, _, _ = fit_naive_estimator(
-            data=data,
+            data=data.filtered_sites(splitting["train"]),
             loss_fn=loss_fn,
             device=device
         ) # naive logits of shape: (n_species,)
@@ -133,25 +228,27 @@ def fit_sgd_like(
         center_logit_psi, center_logit_d = None, None
     
     # Optimizer
+    parameters_psi = [p for p in model.psi_model.parameters() if p.requires_grad]
+    parameters_d = [p for p in model.d_model.parameters() if p.requires_grad]
+    # if sum(p.numel() for p in parameters_psi) + sum(p.numel() for p in parameters_d) == 0:
+    if len(parameters_psi) + len(parameters_d) == 0:
+        raise ValueError("No parameters to optimize. Ensure that model parameters have requires_grad=True.")
     if optimizer_psi_cls == torch.optim.LBFGS or optimizer_d_cls == torch.optim.LBFGS:
         if optimizer_psi_cls != optimizer_d_cls:
             raise ValueError("LBFGS optimizer must be used for both psi and d.")
         if lr_psi != lr_d:
             raise ValueError("LBFGS optimizer must use the same learning rate for psi and d.")
-        opt = torch.optim.LBFGS(
-            list(model.psi_model.parameters()) + list(model.d_model.parameters()),
-            lr=lr_psi, max_iter=1
-        )
+        opt = torch.optim.LBFGS(parameters_psi + parameters_d, lr=lr_psi, max_iter=1)
         opt_psi, opt_d = None, None
     else:
         # NB: L2 regularization is implemented as weight decay in the optimizer
         opt_psi = optimizer_psi_cls(
-            model.psi_model.parameters(), 
+            parameters_psi,
             lr=lr_psi, 
             weight_decay=penalization_lambda_psi if penalization_type == "l2_params" else 0.0
         )
         opt_d = optimizer_d_cls(
-            model.d_model.parameters(), 
+            parameters_d, 
             lr=lr_d, 
             weight_decay=penalization_lambda_d if penalization_type == "l2_params" else 0.0
         )
@@ -278,7 +375,7 @@ def fit_sgd_like(
                     val_loss, _, _ = forward_path_one_batch(
                         batch=batch,
                         model=model,
-                        loss_fn=loss_fn,
+                        loss_fn=loss_fn_eval,
                         site_reduction=site_reduction,
                         species_reduction=species_reduction,
                         device=device
@@ -323,24 +420,25 @@ def fit_sgd_like(
                 final_params_model_psi = deepcopy(model.psi_model.state_dict())
                 final_params_model_d = deepcopy(model.d_model.state_dict())
                 epoch_best_model = epoch
-                save_checkpoint_if_best(
-                    path_checkpoints=path_checkpoints,
-                    epoch=epoch,
-                    last_train_loss=last_train_loss,
-                    last_val_loss=last_val_loss,
-                    final_params_model_psi=final_params_model_psi,
-                    final_params_model_d=final_params_model_d,
-                    opt_psi=opt_psi,
-                    opt_d=opt_d,
-                    opt=opt,
-                    optimizer_psi_cls=optimizer_psi_cls,
-                    optimizer_d_cls=optimizer_d_cls,
-                    train_loss_history=train_loss_history,
-                    val_loss_history=val_loss_history,
-                    lr_psi_history=lr_psi_history,
-                    lr_d_history=lr_d_history,
-                    verbose=False
-                )
+    
+        save_checkpoint_if_best(
+            path_checkpoints=path_checkpoints,
+            epoch=epoch,
+            last_train_loss=last_train_loss,
+            last_val_loss=last_val_loss,
+            final_params_model_psi=final_params_model_psi,
+            final_params_model_d=final_params_model_d,
+            opt_psi=opt_psi,
+            opt_d=opt_d,
+            opt=opt,
+            optimizer_psi_cls=optimizer_psi_cls,
+            optimizer_d_cls=optimizer_d_cls,
+            train_loss_history=train_loss_history,
+            val_loss_history=val_loss_history,
+            lr_psi_history=lr_psi_history,
+            lr_d_history=lr_d_history,
+            verbose=False
+        )
         
         # Update progress bar
         pbar.set_postfix({
@@ -372,25 +470,6 @@ def fit_sgd_like(
                 scheduler_det.step(score_RLROP)
 
     pbar.close()
-    
-    save_checkpoint_if_best(
-        path_checkpoints=path_checkpoints,
-        epoch=epoch,
-        last_train_loss=last_train_loss,
-        last_val_loss=last_val_loss,
-        final_params_model_psi=final_params_model_psi,
-        final_params_model_d=final_params_model_d,
-        opt_psi=opt_psi,
-        opt_d=opt_d,
-        opt=opt,
-        optimizer_psi_cls=optimizer_psi_cls,
-        optimizer_d_cls=optimizer_d_cls,
-        train_loss_history=train_loss_history,
-        val_loss_history=val_loss_history,
-        lr_psi_history=lr_psi_history,
-        lr_d_history=lr_d_history,
-        verbose=False
-    )
 
     history = {"train_loss": train_loss_history, "lr_psi": lr_psi_history, "lr_d": lr_d_history}
     if len(val_loss_history) > 0:

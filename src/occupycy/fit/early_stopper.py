@@ -1,14 +1,20 @@
 class EarlyStopper:
+    """
+    Utility implementing patience-based early stopping.
+
+    Parameters
+    ----------
+    patience : int, default=5
+        Number of consecutive non-improving evaluations allowed.
+    min_delta : float, default=0.0
+        Minimum required improvement.
+    """
     def __init__(
         self,
         patience: int = 5,
         min_delta: float = 0.0
     ):
-        """
-        Args:
-            patience (int): Number of epochs to wait after last time validation loss improved.
-            min_delta (float): Minimum change in the monitored quantity to qualify as an improvement.
-        """
+        """Initialize early stopping state."""
         self.patience = patience
         self.min_delta = min_delta
         self.counter = 0
@@ -18,6 +24,19 @@ class EarlyStopper:
         self,
         validation_loss: float
     ):
+        """
+        Update state and decide whether to stop.
+
+        Parameters
+        ----------
+        validation_loss : float
+            Current monitored loss.
+
+        Returns
+        -------
+        bool
+            ``True`` if training should stop, else ``False``.
+        """
         if validation_loss < (self.min_validation_loss - self.min_delta):
             self.min_validation_loss = validation_loss
             self.counter = 0
