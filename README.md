@@ -1,11 +1,24 @@
-# OccuPYcy
+<p align="center">
+  <img src="assets/logo_cropped.png" height="120" alt="OccuPYcy logo">
+</p>
 
-OccuPYcy is a package for <u>**occu**</u>pan<u>**cy**</u> modeling in <u>**PY**</u>thon. It provides tools for fitting occupancy models using maximum likelihood estimation through (stochastic) gradient descent optimization. 
+**OccuPYcy** is an open-source <u>**PY**</u>thon package for site-<u>**occu**</u>pan<u>**cy**</u> modeling at scale. OccuPYcy provides tools for flexible, high-performance fitting of single or multi-species occupancy models using maximum likelihood with (stochastic) gradient-based optimization in [PyTorch](https://pytorch.org/). It is designed for scalability, deep model expressivity, and robust application to massive, uneven datasets—such as those from citizen science.
 
+## Features
 
-## Local developpement commands
+- **Flexible Model Definitions:** Use linear, non-linear, or neural networks for occupancy and detection probabilities via PyTorch modules.
+- **Extensible:** Define custom architectures and features for modern site-occupancy modeling.
+- **Supports Large, Heterogeneous Datasets:** Memory mapping and efficient batching for millions of observations with highly uneven visits per site. Suited for citizen science data with variable sampling and detection effort.
+- **Multiple Optimizers:** LBFGS, SGD, Adam, and other first- and second-order optimizers.
+- **Penalized Estimation:** Easily apply L1/L2 regularization and other penalties.
+- **Open Source:** code available on GitHub under the MIT License, soon on PyPI. *A scientific publication describing and applying the method is in preparation.*
 
-The following commands will set up the development environment, install the package in editable mode, and run the tests (in quiet mode):
+## Installation
+
+We recommend using [uv](https://github.com/astral-sh/uv) for reproducible local development.  
+*Python ≥3.8 and PyTorch ≥2.0 required.*
+
+### Quick local setup:
 
 ```bash
 uv venv
@@ -13,8 +26,7 @@ uv pip install -e ".[dev]"
 uv run pytest -q
 ```
 
-If you don't want to use uv, you can use the following commands:
-
+If not using `uv`:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -23,73 +35,59 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-## TODO
+## Quick Start Example
 
-### First minimal version
-- [x] Loss function
-- [x] Data class
-- [x] Constant model
-- [x] Fit function for lbfgs
+```python
+from occupycy import SiteOccupancyModel
+import torch
 
-### SGD-like optimizers
-- [x] Dataloaders
-- [x] Fit function for sgd like optimizers
+# Example: single-species with linear predictors
+model = SiteOccupancyModel(
+    n_site_features=5, 
+    n_obs_features=2, 
+    architecture='linear',
+    device='cpu'
+)
 
-### Data
-- [x] Filtering OccuData object on a subset of sites
+# X_sites: [n_sites, n_site_features]
+# U_visits: [n_visits, n_obs_features]
+# y: detection labels [n_visits]
 
-### Models
-- [x] Linear model
-- [x] MLP model
-- [x] Model with MLP + Linear
+X_sites = torch.randn(1000, 5)
+U_visits = torch.randn(10000, 2)
+y = torch.randint(0, 2, (10000,))
 
-### Automation of training
-- [x] Validation for sgd like fit
-- [x] Early stopping for sgd like fit
-- [x] LR scheduler for sgd like fit
-- [x] Go back to best model checkpoint for sgd like fit (when early stopping for instance)
-- [x] Cross-validation for hyper parameter tuning
+loss = model.loss(X_sites, U_visits, y)
+loss.backward()
+# Use your preferred optimizer, or call model.fit(...)
+```
 
-### Penalisation
-- [x] L2/L1 penalisation on parameters
-- [x] L2/L1 penalisation on logits
-- [x] L2/L1 penalisation on logits with naive estimator
+See the [examples/](examples/) folder and documentation for more advanced use cases, including multi-species, deep MLP models, and efficient minibatch training on large datasets.
 
-### Remaining tests
-#### Data
-- [ ] Dataloaders
-- [ ] Splitting
-- [ ] Filtering
-#### Tests SGD-like fit
-- [ ] Validation
-- [ ] Early stopping
-- [ ] LR scheduler
-- [ ] Penalizations
-- [ ] Checkpoints
-#### Models
-- [ ] Constant
-- [ ] Linear
-- [ ] MLP
-- [ ] Linear + MLP
 
-### Further features
-- [x] Allow user-defined split
-- [x] Formula similar to R's formula for model specification (almost linear models)
-- [x] Utils to convert input data (e.g. csv of pandas DataFrame) to OccuData object
-- [ ] Filtering OccuData object on a subset of species
-- [ ] Models with qualitative variables
-- [ ] Save checkpoints along the training for sgd like fit
+## Site-Occupancy Framework on Citizen Science Data
 
-### Cleaning
-- [ ] Delete dependencies: matplotlib, ipykernel
-- [ ] Choose between pandas and polars
 
-### Documentation
-- [ ] Docstrings for all functions and classes
-- [ ] Full documentation
-- [ ] Detailed examples for some use cases (custom model, different models pre-defined, cross-validation, penalization, etc.)
+<p align="center">
+  <img src="assets/opportunistic_PO_data-diagram.png" width="80%" alt="Illustration of citizen science data bias">
+</p>
 
+<p align="center">
+  <img src="assets/occupancy-diagram.png" width="60%" alt="Illustration of occupancy modeling framework">
+</p>
+
+## How to Cite
 
 ## License
 
-OccuPYcy is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+OccuPYcy is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Project Links
+
+- [Source code on GitHub](https://github.com/RaphBnrd/Plantnet-Trend-Estimation)
+- [Example usage](examples/)
+- For questions, contact [raphael.benerradi@inria.fr](mailto:raphael.benerradi@inria.fr)
+
+---
+
+*OccuPYcy was developed as part of ongoing research in scalable machine learning for ecology.*
