@@ -11,7 +11,28 @@ from occupycy.models.constant import ConstantBlock
 
 class MLPOccuModel(OccuModel):
     """
-    Multi-layer perceptron model for occupancy.
+    MLP-based occupancy model for occupancy and detection components.
+
+    Parameters
+    ----------
+    n_species : int
+        Number of species.
+    n_cov_psi : int, default=1
+        Number of occupancy covariates.
+    n_cov_d : int, default=1
+        Number of detection covariates.
+    hidden_dims_psi : list[int], optional
+        Hidden layer sizes for occupancy MLP.
+    hidden_dims_d : list[int], optional
+        Hidden layer sizes for detection MLP.
+    activation_fn_psi : callable, optional
+        Activation constructor for occupancy MLP.
+    activation_fn_d : callable, optional
+        Activation constructor for detection MLP.
+    dropout_psi : float, default=0.0
+        Dropout probability for occupancy MLP.
+    dropout_d : float, default=0.0
+        Dropout probability for detection MLP.
     """
     def __init__(
             self, 
@@ -59,7 +80,20 @@ class MLPOccuModel(OccuModel):
 
 class MLPBlock(nn.Module):
     """
-    Block of MLP layers.
+    Fully connected MLP block.
+
+    Parameters
+    ----------
+    input_dim : int
+        Input feature dimension.
+    output_dim : int
+        Output feature dimension.
+    hidden_dims : list[int]
+        Hidden layer sizes.
+    activation_fn : callable
+        Activation constructor.
+    dropout : float, default=0.0
+        Dropout probability applied after hidden activations.
     """
     def __init__(
             self, 
@@ -81,4 +115,17 @@ class MLPBlock(nn.Module):
         self.mlp = nn.Sequential(*layers)
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Input tensor of shape ``(n_samples, input_dim)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor of shape ``(n_samples, output_dim)``.
+        """
         return self.mlp(X)

@@ -18,6 +18,35 @@ def loss_penalty(
         site_reduction: str,
         species_reduction: str,
     ) -> torch.Tensor:
+    """
+    Compute regularization penalty term.
+
+    Parameters
+    ----------
+    penalization_type : str or None
+        Penalty type among parameter- or logit-based options. If ``None``, no penalty is applied. Examples include:
+        "l2_logits", "l1_logits", "l2_logits_naive", "l1_logits_naive", "l2_params", "l1_params".
+    penalization_lambda_psi, penalization_lambda_d : float or None
+        Penalty coefficients for occupancy and detection components.
+    model : OccuModel
+        Model containing parameters.
+    logit_psi, logit_d : torch.Tensor or None
+        Predicted logits.
+    center_logit_psi, center_logit_d : torch.Tensor or None
+        Reference logits for logit-based penalties.
+    site_reduction, species_reduction : str
+        Reduction modes.
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar penalty value.
+
+    Raises
+    ------
+    ValueError
+        If a reduction mode or penalty type is invalid.
+    """
 
     if penalization_type is None:
         return 0.0

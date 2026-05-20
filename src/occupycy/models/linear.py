@@ -11,7 +11,16 @@ from occupycy.models.constant import ConstantBlock
 
 class LinearOccuModel(OccuModel):
     """
-    Linear-per-species model. 
+    Linear occupancy model with species-specific outputs.
+
+    Parameters
+    ----------
+    n_species : int
+        Number of species.
+    n_cov_psi : int, default=1
+        Number of occupancy covariates.
+    n_cov_d : int, default=1
+        Number of detection covariates.
     """
     def __init__(self, n_species: int, n_cov_psi: int = 1, n_cov_d: int = 1):
         super().__init__(n_species=n_species)

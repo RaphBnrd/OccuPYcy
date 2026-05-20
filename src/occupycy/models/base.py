@@ -6,7 +6,18 @@ import torch.nn as nn
 
 
 class OccuModel(ABC):
-    """Model that maps covariates -> logits. Subclasses should implement component predictors."""
+    """
+    Base occupancy model mapping covariates to occupancy and detection logits.
+
+    Parameters
+    ----------
+    psi_model : torch.nn.Module or None, default=None
+        Module used to predict occupancy logits from site covariates.
+    d_model : torch.nn.Module or None, default=None
+        Module used to predict detection logits from visit covariates.
+    n_species : int, default=1
+        Number of species modeled jointly.
+    """
     
     def __init__(
         self,
@@ -22,8 +33,24 @@ class OccuModel(ABC):
 
     def predict_logit_psi(self, X_psi: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
-        Return occupancy logits for the provided site covariates.
-        - X_psi shape: (n_sites_sub, n_cov_psi) or None for no-covariate models.
+        Predict occupancy logits.
+
+        Parameters
+        ----------
+        X_psi : torch.Tensor or None, default=None
+            Site covariates with shape ``(n_sites_sub, n_cov_psi)``.
+            Can be ``None`` for intercept-only models.
+
+        Returns
+        -------
+        torch.Tensor
+            Occupancy logits with shape ``(n_sites_sub, n_species)`` or
+            ``(1, n_species)`` for intercept-only models.
+
+        Raises
+        ------
+        NotImplementedError
+            If ``psi_model`` is not set.
         """
         if self.psi_model is None:
             raise NotImplementedError(
@@ -33,8 +60,24 @@ class OccuModel(ABC):
 
     def predict_logit_d(self, X_d: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
-        Return detection logits for the provided visit covariates.
-        - X_d shape: (n_visits_sub, n_cov_d) or None for no-covariate models.
+        Predict detection logits.
+
+        Parameters
+        ----------
+        X_d : torch.Tensor or None, default=None
+            Visit covariates with shape ``(n_visits_sub, n_cov_d)``.
+            Can be ``None`` for intercept-only models.
+
+        Returns
+        -------
+        torch.Tensor
+            Detection logits with shape ``(n_visits_sub, n_species)`` or
+            ``(1, n_species)`` for intercept-only models.
+
+        Raises
+        ------
+        NotImplementedError
+            If ``d_model`` is not set.
         """
         if self.d_model is None:
             raise NotImplementedError(
@@ -49,28 +92,66 @@ class OccuModel(ABC):
         X_d: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Compute occupancy and detection logits for the provided covariates.
+        Compute occupancy and detection logits.
+
+        Parameters
+        ----------
+        X_psi : torch.Tensor or None, default=None
+            Site covariates.
+        X_d : torch.Tensor or None, default=None
+            Visit covariates.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            Tuple ``(logit_psi, logit_d)``.
         """
         logit_psi = self.predict_logit_psi(X_psi)
         logit_d = self.predict_logit_d(X_d)
         return logit_psi, logit_d
     
     def eval(self):
-        """Set the model to evaluation mode."""
+        """
+        Set internal modules to evaluation mode.
+
+        Returns
+        -------
+        None
+        """
         if self.psi_model is not None:
             self.psi_model.eval()
         if self.d_model is not None:
             self.d_model.eval()
     
     def train(self):
-        """Set the model to training mode."""
+        """
+        Set internal modules to training mode.
+
+        Returns
+        -------
+        None
+        """
         if self.psi_model is not None:
             self.psi_model.train()
         if self.d_model is not None:
             self.d_model.train()
     
     def to(self, *args, **kwargs):
-        """Move the model to the specified device/dtype."""
+        """
+        Move internal modules to a target device/dtype.
+
+        Parameters
+        ----------
+        *args
+            Positional arguments forwarded to ``torch.nn.Module.to``.
+        **kwargs
+            Keyword arguments forwarded to ``torch.nn.Module.to``.
+
+        Returns
+        -------
+        OccuModel
+            The same model instance.
+        """
         if self.psi_model is not None:
             self.psi_model.to(*args, **kwargs)
         if self.d_model is not None:

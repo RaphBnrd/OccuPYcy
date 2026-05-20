@@ -16,11 +16,23 @@ def _validate_inputs(
     indices_visit_site: torch.Tensor,
 ) -> tuple[int, int, int]:
     """
-    Validate shapes/dtypes of inputs for nll functions.
+    Validate tensor shapes, dtypes, and index consistency.
 
-    - sites x species for occupancy logits
-    - visits x species for detection logits and observation y
-    - indices_visit_site maps each visit row to a site index
+    Parameters
+    ----------
+    y : torch.Tensor
+        Detection matrix of shape ``(n_visits, n_species)``.
+    logit_psi : torch.Tensor
+        Occupancy logits of shape ``(n_sites, n_species)``.
+    logit_d : torch.Tensor
+        Detection logits of shape ``(n_visits, n_species)``.
+    indices_visit_site : torch.Tensor
+        Site index per visit, shape ``(n_visits,)``.
+
+    Returns
+    -------
+    tuple[int, int, int]
+        ``(n_sites, n_visits, n_species)``.
     """
     if y.ndim != 2:
         raise ValueError(f"y must be 2D (n_visits, n_species); got shape {tuple(y.shape)}")
@@ -74,13 +86,27 @@ def nll_logits(
     species_reduction: SpeciesReduction = "mean",
 ) -> torch.Tensor:
     """
-    Core NLL in logits space.
+    Negative log-likelihood in logit space for single-season multi-species occupancy.
 
-    Returns depending on reductions:
-      - species_reduction="none", site_reduction="none" -> (n_sites, n_species)
-      - species_reduction="mean|sum", site_reduction="none" -> (n_sites,)
-      - species_reduction="none", site_reduction="sum|mean" -> (n_species,)
-      - species_reduction="mean|sum", site_reduction="sum|mean" -> scalar
+    Parameters
+    ----------
+    y : torch.Tensor
+        Visit-level detections, shape ``(n_visits, n_species)``.
+    logit_psi : torch.Tensor
+        Occupancy logits, shape ``(n_sites, n_species)``.
+    logit_d : torch.Tensor
+        Detection logits, shape ``(n_visits, n_species)``.
+    indices_visit_site : torch.Tensor
+        Site index per visit.
+    site_reduction : {"sum", "mean", "none"}, default="sum"
+        Site-level reduction.
+    species_reduction : {"mean", "sum", "none"}, default="mean"
+        Species-level reduction.
+
+    Returns
+    -------
+    torch.Tensor
+        NLL tensor with shape determined by reductions.
     """
     y = torch.as_tensor(y) # shape: (n_visits, n_species)
     logit_psi = torch.as_tensor(logit_psi) # shape: (n_sites, n_species)
@@ -147,7 +173,31 @@ def nll_probs(
     species_reduction: SpeciesReduction = "mean",
     eps: float = 1e-8,
 ) -> torch.Tensor:
-    """Probability-space wrapper around `nll_logits`."""
+    """
+    Probability-space wrapper around ``nll_logits``.
+
+    Parameters
+    ----------
+    y : torch.Tensor
+        Visit-level detections.
+    psi : torch.Tensor
+        Occupancy probabilities in ``(0, 1)``.
+    d : torch.Tensor
+        Detection probabilities in ``(0, 1)``.
+    indices_visit_site : torch.Tensor
+        Site index per visit.
+    site_reduction : {"sum", "mean", "none"}, default="sum"
+        Site-level reduction.
+    species_reduction : {"mean", "sum", "none"}, default="mean"
+        Species-level reduction.
+    eps : float, default=1e-8
+        Clamping value for numeric stability.
+
+    Returns
+    -------
+    torch.Tensor
+        NLL tensor with shape determined by reductions.
+    """
     if eps <= 0:
         raise ValueError("eps must be > 0.")
     psi = torch.as_tensor(psi).clamp(min=eps, max=1 - eps)

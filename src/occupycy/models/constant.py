@@ -11,7 +11,12 @@ from occupycy.data import OccuData
 
 class ConstantOccuModel(OccuModel):
     """
-    Constant-per-species model. 
+    Intercept-only occupancy model with one logit per species.
+
+    Parameters
+    ----------
+    n_species : int
+        Number of species.
     """
     def __init__(self, n_species: int):
         super().__init__(n_species=n_species)
@@ -21,7 +26,16 @@ class ConstantOccuModel(OccuModel):
 
     def initialize_rough_estimate(self, data: "OccuData") -> None:
         """
-        Initialize the constant parameters to the rough estimates.
+        Initialize intercept logits from rough moment-based estimates.
+
+        Parameters
+        ----------
+        data : OccuData
+            Occupancy dataset used to compute rough estimates.
+
+        Returns
+        -------
+        None
         """
         y = data.y
         indices_visit_site = data.indices_visit_site # shape: (n_visits,) with values in [0, n_sites-1]
@@ -56,7 +70,12 @@ class ConstantOccuModel(OccuModel):
 
 class ConstantBlock(nn.Module):
     """
-    Block of constant logits.
+    Constant-logit block shared across all samples.
+
+    Parameters
+    ----------
+    n_species : int
+        Number of species.
     """
     def __init__(self, n_species: int):
         super().__init__()
@@ -64,7 +83,18 @@ class ConstantBlock(nn.Module):
 
     def forward(self, X: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
-        X is a tensor of shape (n_sub, n_cov), or None. Only the first dim (n_sub) is used to infer the number of samples to expand the constant logits to.
+        Expand constant logits to match batch size.
+
+        Parameters
+        ----------
+        X : torch.Tensor or None, default=None
+            Input tensor with shape ``(n_samples, n_cov)``. Only ``n_samples``
+            is used. If ``None``, returns a single-row tensor.
+
+        Returns
+        -------
+        torch.Tensor
+            Tensor of shape ``(n_samples, n_species)`` or ``(1, n_species)``.
         """
         if X is None:
             return self.logit_species.unsqueeze(0)  # shape: (1, n_species)

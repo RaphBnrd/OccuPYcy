@@ -12,9 +12,14 @@ from occupycy.models.mlp import MLPBlock
 
 class LinearMLPOccuModel(OccuModel):
     """
-    Multi-layer perceptron model for occupancy. 
-    When inferring, first n_cov_linear covariates are fed to linear layer, 
-    and next n_cov_mlp covariates are fed to mlp, and outputs are summed.
+    Hybrid model combining linear and MLP components.
+
+    Notes
+    -----
+    For each component (psi and d), the first ``n_cov_*_linear`` columns are
+    sent to the linear branch and the next ``n_cov_*_mlp`` columns to the MLP
+    branch. Outputs are summed.
+    More details in the docstring of ``LinearMLPBlock``.
     """
     def __init__(
             self, 
@@ -51,7 +56,22 @@ class LinearMLPOccuModel(OccuModel):
 
 class LinearMLPBlock(nn.Module):
     """
-    Block of linear + MLP layers.
+    Hybrid block with a linear branch and an MLP branch.
+
+    Parameters
+    ----------
+    n_species : int
+        Number of species.
+    n_cov_linear : int, default=1
+        Number of covariates routed to the linear branch.
+    n_cov_mlp : int, default=1
+        Number of covariates routed to the MLP branch.
+    hidden_dims_mlp : list[int], optional
+        Hidden layer sizes for the MLP branch.
+    activation_fn_mlp : callable, optional
+        Activation constructor for the MLP branch.
+    dropout_mlp : float, default=0.0
+        Dropout probability for the MLP branch.
     """
     def __init__(
             self, 
@@ -90,6 +110,19 @@ class LinearMLPBlock(nn.Module):
             )
 
     def forward(self, X: Optional[torch.Tensor]) -> torch.Tensor:
+        """
+        Compute logits from split covariates.
+
+        Parameters
+        ----------
+        X : torch.Tensor or None
+            Input tensor containing linear covariates first, then MLP covariates.
+
+        Returns
+        -------
+        torch.Tensor
+            Species logits of shape ``(n_samples, n_species)``.
+        """
         X_linear = X[:, :self.n_cov_linear] if self.n_cov_linear > 0 else None
         X_mlp = X[:, self.n_cov_linear:self.n_cov_linear+self.n_cov_mlp] if self.n_cov_mlp > 0 else None
         logits_linear = self.linear(X_linear)
