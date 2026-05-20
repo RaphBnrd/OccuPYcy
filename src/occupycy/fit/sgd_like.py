@@ -113,6 +113,7 @@ def fit_sgd_like(
     score_early_stopping: str = "val_loss",
     patience_reduceLROnPlateau: Optional[int] = None,
     factor_reduceLROnPlateau: float = 0.5,
+    min_lr_reduceLROnPlateau: float = 1e-5,
     score_reduceLROnPlateau: str = "val_loss",
     penalization_type: Optional[str] = None,
     penalization_lambda_psi: Optional[float] = None,
@@ -166,6 +167,8 @@ def fit_sgd_like(
         Number of epochs with no improvement after which learning rate will be reduced. If None, no learning rate scheduling is performed.
     factor_reduceLROnPlateau : float, default=0.5
         Factor by which the learning rate will be reduced when using ReduceLROnPlateau.
+    min_lr_reduceLROnPlateau : float, default=1e-5
+        Minimum learning rate to which the optimizer will be reduced.
     score_reduceLROnPlateau : str, default="val_loss"
         Score to monitor for ReduceLROnPlateau ("val_loss" or "train_loss").
     penalization_type : str or None, default=None
@@ -276,7 +279,7 @@ def fit_sgd_like(
             "mode": "min",
             "factor": factor_reduceLROnPlateau,
             "patience": patience_reduceLROnPlateau,
-            "min_lr": 1e-5
+            "min_lr": min_lr_reduceLROnPlateau
         }
         if optimizer_psi_cls == torch.optim.LBFGS:
             scheduler = ReduceLROnPlateau(opt, **kwargs_scheduler)

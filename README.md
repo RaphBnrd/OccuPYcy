@@ -1,6 +1,11 @@
 <p align="center">
-  <img src="assets/logo_cropped.png" height="120" alt="OccuPYcy logo">
+  <img src="assets/logo_cropped.png" width="80%" alt="OccuPYcy logo"
+  style="border: 3px solid #EF702D; border-radius: 10px;">
 </p>
+<!-- Colors: 
+dark green = #2B432A ; biege = #FEF8F5 ; orange = #EF702D ; 
+yellow = #FBB742 ; light green = #7AA92F
+-->
 
 **OccuPYcy** is an open-source <u>**PY**</u>thon package for site-<u>**occu**</u>pan<u>**cy**</u> modeling at scale. OccuPYcy provides tools for flexible, high-performance fitting of single or multi-species occupancy models using maximum likelihood with (stochastic) gradient-based optimization in [PyTorch](https://pytorch.org/). It is designed for scalability, deep model expressivity, and robust application to massive, uneven datasets—such as those from citizen science.
 
@@ -37,39 +42,129 @@ pytest -q
 
 ## Quick Start Example
 
+Here is an example of MLP model fitting on simulated data. See the [examples/](examples/) folder, with details of the example below in [01-fitting_on_simulated_data.ipynb](examples/01-fitting_on_simulated_data.ipynb). 
 
-## Site-Occupancy Framework on Citizen Science Data
+Below is an example fitting a non-linear MLP occupancy model on simulated data.  
+For a full demo, see [examples/01-fitting_on_simulated_data.ipynb](examples/01-fitting_on_simulated_data.ipynb). Other examples are available in the [examples/](examples/) folder, with detailed explanations and visualizations.
 
 
-<p align="center">
-  <img src="assets/opportunistic_PO_data-diagram.png" width="80%" alt="Illustration of citizen science data bias">
-</p>
+```python
+# %%
+import torch
+import occupycy
+
+seed = 1
+torch.manual_seed(seed)
+
+# 1. Simulate data (arbitrary non-linear functions)
+def true_f_psi(X_psi): # here X_psi of shape (n_sites, n_cov_psi=2)
+    return torch.sigmoid(
+        - 0.5 * torch.cos(X_psi[:,0]) - 0.5 * (X_psi[:,1] ** 2)
+    ).unsqueeze(1)
+def true_f_d(X_d): # here X_d of shape (n_sites, n_cov_d=1)
+    return torch.sigmoid(
+        torch.tanh(5 * X_d[:,0]) - torch.cos(X_d[:,0])
+    ).unsqueeze(1) * 0.02
+
+y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z = \
+    occupycy.data.simulate_non_linear(
+        n_sites=5000,
+        n_total_visits_max=int(1e6),
+        n_cov_psi=2,
+        n_cov_d=1,
+        f_effort = lambda x: torch.distributions.LogNormal(0, 3.5).sample((x.shape[0],)),
+        f_psi=true_f_psi,
+        f_d=true_f_d,
+        seed=seed,
+        plot_summary=True,
+        verbose=True
+    )
+
+# 2. Build OccuData
+# y: tensor of shape (n_total_visits, n_species) with the detection/non-detection data
+# visit_site_ids: list of length (n_total_visits,) with the site id of each visit
+# site_ids_in_X_psi: list of length (n_sites,) with the site ids of the rows in X_psi
+# X_psi: tensor of shape (n_sites, n_cov_psi) with the covariates for occupancy
+# X_d: tensor of shape (n_total_visits, n_cov_d) with the covariates for detection
+data = occupycy.data.OccuData(
+    y=y, 
+    visit_site_ids=visit_site_ids,
+    X_psi=X_psi,
+    X_d=X_d,
+    site_ids_in_X_psi=site_ids_in_X_psi
+)
+
+# 3. Define a model (MLP)
+model = occupycy.models.MLPOccuModel(
+    n_species=1,
+    n_cov_psi=data.X_psi.shape[1],
+    n_cov_d=data.X_d.shape[1],
+    hidden_dims_psi=[256, 256], hidden_dims_d=[256, 256],
+    activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU
+)
+
+# 4. Fit the model (Adam)
+res = occupycy.fit.fit_sgd_like(
+    data, # OccuData object
+    model, # OccuModel object
+    n_epochs=1000, # maximum number of epochs
+    val_fraction=0.15, # fraction of sites to use for validation
+    batch_size=512, # number of sites per batch
+    optimizer_psi_cls=torch.optim.Adam, # optimizer class for the occupancy part
+    optimizer_d_cls=torch.optim.Adam, # optimizer class for the detection part
+    lr_psi=1e-3, # learning rate for the occupancy part
+    lr_d=1e-3, # learning rate for the detection part
+    patience_early_stopping=100,
+    patience_reduceLROnPlateau=20,
+)
+
+# 5. Get the predictions
+with torch.no_grad():
+    pred_logit_psi, pred_logit_d = model.forward_logits(X_psi=X_psi, X_d=X_d)
+
+```
+
+See the [examples/](examples/) folder and documentation for more advanced use cases.
+
+## Site-Occupancy Framework for Citizen Science Data
+
+**Site-occupancy models** estimate the probability that a species is present at a given site while accounting for imperfect detection during surveys ([MacKenzie et al. (2002)](https://doi.org/10.1890/0012-9658(2002)083[2248:ESORWD]2.0.CO;2)). This hierarchical approach is especially powerful for citizen science data, where both **detection bias** and **sampling bias** are common due to uneven survey effort and heterogeneous detection conditions.
 
 <p align="center">
   <img src="assets/occupancy-diagram.png" width="60%" alt="Illustration of occupancy modeling framework">
 </p>
 
+Mathematically:
+- $Z_s \sim \mathrm{Bernoulli}(\psi_s)$  
+  The latent occupancy state ($Z_s$) for site $s$.
+- $Y_v \mid Z_{s(v)} \sim \mathrm{Bernoulli}(d_v \cdot Z_{s(v)})$  
+  The detection ($Y_v$) during visit $v$, conditional on the site's true state $Z_{s(v)}$.
+
+The probabilities $\psi_s$ (occupancy) and $d_v$ (detection) are flexible, parametric functions of covariates (e.g., spatial, temporal, observer info):
+- **Classically**, $\psi_s$ and $d_v$ are modeled as sigmoid-linear functions (logistic regression).
+- **With OccuPYcy**, these can be *any* differentiable model; in particular, a sigmoid transformation of an arbitrary PyTorch module, such as a neural network.
+
+> **Example:**  
+> &nbsp;&nbsp; $\psi_s = \mathrm{sigmoid}\left(f_{\theta_\psi}(X_s)\right)$  
+> &nbsp;&nbsp; $d_v = \mathrm{sigmoid}\left(g_{\theta_d}(U_v)\right)$  
+> where $f_{\theta_\psi}$ and $g_{\theta_d}$ can be linear, MLP, or any neural network.
+
+**Applications:**  
+- Well-suited for massive, opportunistic (presence-only or presence/absence) datasets, such as citizen science records.
+- Handles uneven sampling: sites can correspond to spatial (or spatio-temporal) grid cells in which observations occur.
+- Corrects for both **detection** and **sampling** bias, enabling robust species distribution and trend estimation.
+
+<p align="center">
+  <img src="assets/opportunistic_PO_data-diagram.png" width="60%" alt="Illustration of citizen science data bias">
+</p>
+
 ## How to Cite
 
-If you use OccuPYcy in your research, please cite the following reference:
-
-```
-Benerradi, R., Botella, C., Servajean, M., & Joly, A. (2024). "Increasing the Expressivity and Scalability of Site-Occupancy Modeling for Species Trend Estimation from Citizen Science Data." *Manuscript in preparation*. [GitHub Repository](https://github.com/RaphBnrd/Plantnet-Trend-Estimation)
-```
-
-BibTeX:
-```bibtex
-@article{benerradi2024occupycy,
-  title = {Increasing the Expressivity and Scalability of Site-Occupancy Modeling for Species Trend Estimation from Citizen Science Data},
-  author = {Benerradi, Raphaël and Botella, Christophe and Servajean, Maximilien and Joly, Alexis},
-  note = {Manuscript in preparation. \url{https://github.com/RaphBnrd/Plantnet-Trend-Estimation}},
-  year = {2024}
-}
-```
+*Manuscript in preparation*
 
 ## Contributing
 
-Contributions are welcome! Please open an [issue](https://github.com/RaphBnrd/Plantnet-Trend-Estimation/issues) or submit a pull request. See `CONTRIBUTING.md` for details.
+Contributions are welcome! Please open an [issue](https://github.com/RaphBnrd/Plantnet-Trend-Estimation/issues) or submit a pull request.
 
 ## License
 
@@ -77,10 +172,6 @@ OccuPYcy is licensed under the MIT License. See the [LICENSE](LICENSE) file for 
 
 ## Project Links
 
-- [Source code on GitHub](https://github.com/RaphBnrd/Plantnet-Trend-Estimation)
+- [Source code on GitHub](https://github.com/RaphBnrd/OccuPYcy)
 - [Example usage](examples/)
 - For questions, contact [raphael.benerradi@inria.fr](mailto:raphael.benerradi@inria.fr)
-
----
-
-*OccuPYcy was developed as part of ongoing research in scalable machine learning for ecology.*
