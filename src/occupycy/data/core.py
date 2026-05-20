@@ -149,14 +149,18 @@ class OccuData():
         *, 
         device: str | torch.device | None = None, 
         dtype: torch.dtype | None = None
-    ) -> "OccuData":
+    ) -> None:
         """
         Move internal tensors to a given device/dtype.
-
+        Parameters
+        ----------
+        device : str or torch.device or None, default=None
+            Device to move tensors to (e.g. "cpu", "cuda"). If None, no device move is performed.
+        dtype : torch.dtype or None, default=None
+            Dtype to move tensors to (e.g. torch.float32). If None, no dtype change is performed.
         Returns
         -------
-        OccuData
-            This object.
+        None
         """
         def _to(tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
             if tensor is None:

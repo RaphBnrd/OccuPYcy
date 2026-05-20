@@ -1,6 +1,5 @@
 <p align="center">
-  <img src="assets/logo_cropped.png" width="80%" alt="OccuPYcy logo"
-  style="border: 3px solid #EF702D; border-radius: 10px;">
+  <img src="assets/logo_cropped.png" width="80%" alt="OccuPYcy logo">
 </p>
 <!-- Colors: 
 dark green = #2B432A ; biege = #FEF8F5 ; orange = #EF702D ; 
