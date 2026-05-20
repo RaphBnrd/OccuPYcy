@@ -37,33 +37,6 @@ pytest -q
 
 ## Quick Start Example
 
-```python
-from occupycy import SiteOccupancyModel
-import torch
-
-# Example: single-species with linear predictors
-model = SiteOccupancyModel(
-    n_site_features=5, 
-    n_obs_features=2, 
-    architecture='linear',
-    device='cpu'
-)
-
-# X_sites: [n_sites, n_site_features]
-# U_visits: [n_visits, n_obs_features]
-# y: detection labels [n_visits]
-
-X_sites = torch.randn(1000, 5)
-U_visits = torch.randn(10000, 2)
-y = torch.randint(0, 2, (10000,))
-
-loss = model.loss(X_sites, U_visits, y)
-loss.backward()
-# Use your preferred optimizer, or call model.fit(...)
-```
-
-See the [examples/](examples/) folder and documentation for more advanced use cases, including multi-species, deep MLP models, and efficient minibatch training on large datasets.
-
 
 ## Site-Occupancy Framework on Citizen Science Data
 
@@ -77,6 +50,26 @@ See the [examples/](examples/) folder and documentation for more advanced use ca
 </p>
 
 ## How to Cite
+
+If you use OccuPYcy in your research, please cite the following reference:
+
+```
+Benerradi, R., Botella, C., Servajean, M., & Joly, A. (2024). "Increasing the Expressivity and Scalability of Site-Occupancy Modeling for Species Trend Estimation from Citizen Science Data." *Manuscript in preparation*. [GitHub Repository](https://github.com/RaphBnrd/Plantnet-Trend-Estimation)
+```
+
+BibTeX:
+```bibtex
+@article{benerradi2024occupycy,
+  title = {Increasing the Expressivity and Scalability of Site-Occupancy Modeling for Species Trend Estimation from Citizen Science Data},
+  author = {Benerradi, Raphaël and Botella, Christophe and Servajean, Maximilien and Joly, Alexis},
+  note = {Manuscript in preparation. \url{https://github.com/RaphBnrd/Plantnet-Trend-Estimation}},
+  year = {2024}
+}
+```
+
+## Contributing
+
+Contributions are welcome! Please open an [issue](https://github.com/RaphBnrd/Plantnet-Trend-Estimation/issues) or submit a pull request. See `CONTRIBUTING.md` for details.
 
 ## License
 
