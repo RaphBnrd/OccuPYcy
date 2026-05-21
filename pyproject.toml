@@ -26,6 +26,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7"]
 
+[project.urls]
+Documentation = "https://raphbnrd.github.io/OccuPYcy/"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
