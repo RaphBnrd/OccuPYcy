@@ -29,7 +29,7 @@ def test_raises_if_indices_visit_site_out_of_range():
     with pytest.raises(ValueError, match="indices_visit_site must be in"):
         nll_logits(
             y, logit_psi=logit_psi, logit_d=logit_d, indices_visit_site=indices_visit_site,
-            species_reduction="none", site_reduction="none"
+            species_reduction="none", site_reduction="none", validate_inputs=True
         )
 
 def test_nll_probs(tol=1e-6):
