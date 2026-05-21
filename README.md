@@ -25,6 +25,8 @@ We recommend using [uv](https://docs.astral.sh/uv/) for reproducible local devel
 
 ### Using OccuPYcy in another project
 
+You can install OccuPYcy as a dependency in your project either from GitHub or from a local clone of the repository.
+
 **From GitHub:** 
 Navigate to the repository on GitHub, create and activate your environment, and run:
 
@@ -44,7 +46,7 @@ pip install -e /local/path/to/the/repository/OccuPYcy
 
 ### Package download
 
-To download the code and install the dependencies, you should first clone the repository, using `git clone https://github.com/RaphBnrd/OccuPYcy.git` at the location of your choice. You can also download the code as a zip of clone using ssh.
+To download the source code and install the dependencies, you should first clone the repository, using `git clone https://github.com/RaphBnrd/OccuPYcy.git` at the location of your choice. You can also download the code as a zip of clone using ssh.
 
 Then, if you want to setup a local development environment in the repository, move to the repository root (`cd occupycy`) and you can use `uv` or `venv` to create a virtual environment and install the dependencies.
 
@@ -65,10 +67,9 @@ pytest -q
 
 ## Quick Start Example
 
-Here is an example of MLP model fitting on simulated data. See the [examples/](examples/) folder, with details of the example below in [01-fitting_on_simulated_data.ipynb](examples/01-fitting_on_simulated_data.ipynb). 
-
 Below is an example fitting a non-linear MLP occupancy model on simulated data.  
-For a full demo, see [examples/01-fitting_on_simulated_data.ipynb](examples/01-fitting_on_simulated_data.ipynb). Other examples are available in the [examples/](examples/) folder, with detailed explanations and visualizations.
+For a full demo, see [examples/01-fitting_on_simulated_data.ipynb](examples/01-fitting_on_simulated_data.ipynb). 
+Other examples are available in the [examples/](examples/) folder. More details on the code below are available in the notebook [01-fitting_on_simulated_data.ipynb](examples/01-fitting_on_simulated_data.ipynb).
 
 
 ```python
@@ -78,6 +79,7 @@ import occupycy
 
 seed = 1
 torch.manual_seed(seed)
+device = torch.device("cpu")
 
 # 1. Simulate data (arbitrary non-linear functions)
 def true_f_psi(X_psi): # here X_psi of shape (n_sites, n_cov_psi=2)
@@ -116,6 +118,7 @@ data = occupycy.data.OccuData(
     X_d=X_d,
     site_ids_in_X_psi=site_ids_in_X_psi
 )
+data.to(device=device)
 
 # 3. Define a model (MLP)
 model = occupycy.models.MLPOccuModel(
@@ -125,6 +128,7 @@ model = occupycy.models.MLPOccuModel(
     hidden_dims_psi=[256, 256], hidden_dims_d=[256, 256],
     activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU
 )
+model.to(device=device)
 
 # 4. Fit the model (Adam)
 res = occupycy.fit.fit_sgd_like(
@@ -139,15 +143,14 @@ res = occupycy.fit.fit_sgd_like(
     lr_d=1e-3, # learning rate for the detection part
     patience_early_stopping=100,
     patience_reduceLROnPlateau=20,
+    device=device
 )
 
 # 5. Get the predictions
 with torch.no_grad():
-    pred_logit_psi, pred_logit_d = model.forward_logits(X_psi=X_psi, X_d=X_d)
+    pred_logit_psi, pred_logit_d = model.forward_logits(X_psi=X_psi.to(device), X_d=X_d.to(device))
 
 ```
-
-See the [examples/](examples/) folder and documentation for more advanced use cases.
 
 ## Site-Occupancy Framework for Citizen Science Data
 
