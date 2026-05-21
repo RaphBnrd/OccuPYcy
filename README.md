@@ -190,9 +190,12 @@ Then, for $K$ independent species, the likelihood of the observed data is:
   <img src="assets/NLL_equation.png" width="90%" alt="Negative log-likelihood equation">
 </p>
 
-where $\mathcal{S}_{1,k}$ and $\mathcal{S}_{0,k}$ are the sets of sites with at least one detection and no detections for species $k$, respectively, and $\mathcal{V}_s$ is the set of visits to site $s$. 
-This likelihood is optimized with respect to the parameters $\theta_\psi$ and $\theta_d$ — the parameters of the occupancy and detection models — using (stochastic) gradient-based methods.
+where: 
+- $\mathcal{S}_{1,k}$ is the set of sites with at least one detection for species $k$
+- $\mathcal{S}_{0,k}$ is the set of sites with no detection for species $k$
+- $\mathcal{V}_s$ is the set of visits to site $s$
 
+This likelihood is optimized with respect to the parameters $\theta_\psi$ and $\theta_d$ — the parameters of the occupancy and detection models — using (stochastic) gradient-based methods.
 
 > **Example:**  
 > &nbsp;&nbsp; $\psi_s = \mathrm{sigmoid}\left(f_{\theta_\psi}(X_s)\right)$  
