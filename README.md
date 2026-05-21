@@ -129,7 +129,6 @@ data = occupycy.data.OccuData(
     X_d=X_d,
     site_ids_in_X_psi=site_ids_in_X_psi
 )
-data.to(device=device)
 
 # 3. Define an MLP-MLP model
 # (other architectures are possible, including custom ones)
@@ -140,7 +139,6 @@ model = occupycy.models.MLPOccuModel(
     hidden_dims_psi=[256, 256], hidden_dims_d=[256, 256],
     activation_fn_psi=torch.nn.ReLU, activation_fn_d=torch.nn.ReLU
 )
-model.to(device=device)
 
 # 4. Fit the model with Adam (LBFGS is also available)
 res = occupycy.fit.fit_sgd_like(

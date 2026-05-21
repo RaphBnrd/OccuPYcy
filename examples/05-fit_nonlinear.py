@@ -342,7 +342,7 @@ def main():
                 res = fit_lbfgs_full_batch(
                     data, model, max_iter=1000, 
                     lr=this_dict['lrs'][idx_meth],
-                    device=torch.device("cpu"),
+                    device=device,
                     tolerance_grad=1e-8, tolerance_change=1e-10, history_size=100, line_search_fn="strong_wolfe"
                 )
 
@@ -352,7 +352,7 @@ def main():
                     data, model, n_epochs=300, batch_size=data.n_sites, 
                     lr_psi=this_dict['lrs'][idx_meth], lr_d=this_dict['lrs'][idx_meth],
                     optimizer_psi_cls=torch.optim.LBFGS, optimizer_d_cls=torch.optim.LBFGS,
-                    device=torch.device("cpu"),
+                    device=device,
                     penalization_type=penalization_type,
                     penalization_lambda_psi=penalization_lambda_psi,
                     penalization_lambda_d=penalization_lambda_d
@@ -364,7 +364,7 @@ def main():
                     data, model, n_epochs=300, batch_size=100, 
                     lr_psi=this_dict['lrs'][idx_meth], lr_d=this_dict['lrs'][idx_meth],
                     optimizer_psi_cls=torch.optim.SGD, optimizer_d_cls=torch.optim.SGD,
-                    device=torch.device("cpu"),
+                    device=device,
                     penalization_type=penalization_type,
                     penalization_lambda_psi=penalization_lambda_psi,
                     penalization_lambda_d=penalization_lambda_d
@@ -376,7 +376,7 @@ def main():
                     data, model, n_epochs=300, batch_size=100, 
                     lr_psi=this_dict['lrs'][idx_meth], lr_d=this_dict['lrs'][idx_meth],
                     optimizer_psi_cls=torch.optim.Adam, optimizer_d_cls=torch.optim.Adam,
-                    device=torch.device("cpu"),
+                    device=device,
                     penalization_type=penalization_type,
                     penalization_lambda_psi=penalization_lambda_psi,
                     penalization_lambda_d=penalization_lambda_d
