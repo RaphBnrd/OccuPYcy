@@ -97,6 +97,8 @@ def _prepare_splitting(
         raise ValueError("All site ids in 'train' splitting must be valid (present in data.mapping_site_idx).")
     if not all(site_id in data.mapping_site_idx for site_id in splitting["val"]):
         raise ValueError("All site ids in 'val' splitting must be valid (present in data.mapping_site_idx).")
+    if set(splitting["train"]).intersection(set(splitting["val"])):
+        raise ValueError("Train and validation site ids must not overlap.")
   
     data_train = data.filtered_sites(splitting["train"])
     data_val = data.filtered_sites(splitting["val"])

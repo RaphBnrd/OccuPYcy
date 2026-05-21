@@ -410,7 +410,7 @@ class OccuSiteDataset(Dataset):
         idx_site = self.data.mapping_site_idx[site_id] # scalar index corresponding to site_id in X_psi
 
         # mask = self.data.indices_visit_site == idx_site # shape (n_visits,) with n_visits_sub True values corresponding to visits for the site of interest
-        mask = self.data.mask_visits_each_site[idx_site]
+        mask = self.data.mask_visits_each_site[idx_site].to(device=self.data.y.device) # shape (n_visits,) with n_visits_sub True values corresponding to visits for the site of interest
 
         y = self.data.y[mask] # shape (n_visits_sub, n_species)
         X_d = self.data.X_d[mask] if self.data.X_d is not None else None # shape (n_visits_sub, n_cov_d) or None
