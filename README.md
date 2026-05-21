@@ -186,18 +186,20 @@ The probabilities $\psi_s$ (occupancy) and $d_v$ (detection) are flexible, param
 
 Then, for $K$ independent species, the likelihood of the observed data is:
 $$
--\ell \Big( \theta_\psi, \theta_d \mid (y_{v,k})_{v,k} \Big)
+-\ell(\theta_\psi, \theta_d \mid (y_{v,k})_{v,k})
 = - \sum_{k=1}^K \sum_{s \in \mathcal{S}_{1,k}} \left[
-    \log(\psi_{s,k})
-    + \sum_{v \in \mathcal{V}_s} 
-        y_{v,k} \log(d_{v,k}) + (1 - y_{v,k}) \log(1 - d_{v,k})
+\log(\psi_{s,k})
++ \sum_{v \in \mathcal{V}_s}
+y_{v,k} \log(d_{v,k})
++ (1 - y_{v,k}) \log(1 - d_{v,k})
 \right]
 $$
 
 $$
-- \sum_{k=1}^K \sum_{s \in \mathcal{S}_{0,k}} \log \left(
-    1 - \psi_{s,k}
-    + \psi_{s,k} \prod_{v \in \mathcal{V}_s} (1 - d_{v,k})
+- \sum_{k=1}^K \sum_{s \in \mathcal{S}_{0,k}}
+\log \left(
+1 - \psi_{s,k}
++ \psi_{s,k} \prod_{v \in \mathcal{V}_s} (1 - d_{v,k})
 \right)
 $$
 where $\mathcal{S}_{1,k}$ and $\mathcal{S}_{0,k}$ are the sets of sites with at least one detection and no detections for species $k$, respectively, and $\mathcal{V}_s$ is the set of visits to site $s$. 
