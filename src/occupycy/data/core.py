@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional, Dict
+import warnings
 
 import torch
 from torch.utils.data import Dataset, DataLoader, Subset
@@ -310,7 +311,10 @@ class OccuData():
         """
 
         if len(site_id_mask) != len(set(site_id_mask)):
-            print("Warning: site_mask contains duplicate indices. Duplicates are ignored.")
+            warnings.warn(
+                "site_mask contains duplicate indices. Duplicates are ignored.",
+                UserWarning
+            )
             site_id_mask = list(set(site_id_mask))
         
         indices_site_mask = [self.site_ids_in_X_psi.index(site_id) for site_id in site_id_mask]

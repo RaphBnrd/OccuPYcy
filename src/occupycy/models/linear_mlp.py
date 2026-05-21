@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional, Callable
+import warnings
 
 import torch
 import torch.nn as nn
@@ -90,7 +91,10 @@ class LinearMLPBlock(nn.Module):
         if self.n_cov_linear < 0:
             raise ValueError("n_cov_linear must be non-negative.")
         elif self.n_cov_linear == 0:
-            print("Warning: n_cov_linear=0 results in no covariates for linear component. Using null linear since mlp will include bias.")
+            warnings.warn(
+                "n_cov_linear=0 results in no covariates for linear component. Using null linear since mlp will include bias.", 
+                UserWarning
+            )
             self.linear = lambda _: torch.tensor(0.0)
         else:
             self.linear = nn.Linear(self.n_cov_linear, n_species, bias=False)
@@ -98,10 +102,16 @@ class LinearMLPBlock(nn.Module):
         if self.n_cov_mlp < 0:
             raise ValueError("n_cov_mlp must be non-negative.")
         elif self.n_cov_mlp == 0:
-            print("Warning: n_cov_mlp=0 results in no covariates for mlp component. Using constant block instead of mlp.")
+            warnings.warn(
+                "n_cov_mlp=0 results in no covariates for mlp component. Using constant block instead of mlp.", 
+                UserWarning
+            )
             self.mlp = ConstantBlock(n_species)
         elif hidden_dims_mlp == []:
-            print("Warning: hidden_dims_mlp is empty, resulting in no hidden layers for mlp component. Using linear layer instead of mlp.")
+            warnings.warn(
+                "hidden_dims_mlp is empty, resulting in no hidden layers for mlp component. Using linear layer instead of mlp.", 
+                UserWarning
+            )
             self.mlp = nn.Linear(self.n_cov_mlp, n_species)
         else:
             self.mlp = MLPBlock(

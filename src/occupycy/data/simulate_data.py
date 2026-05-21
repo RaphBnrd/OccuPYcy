@@ -2,7 +2,10 @@ import torch
 import matplotlib.pyplot as plt
 import polars as pl
 
-def filter_subset_visits(indices_visit_site, n_sites, n_total_visits_max, generator, keep_all_sites=False):
+def filter_subset_visits(
+        indices_visit_site, n_sites, n_total_visits_max, 
+        generator, keep_all_sites=False, verbose=True
+    ):
     """
     Subsample visit-to-site indices with optional one-visit-per-site guarantee.
 
@@ -11,10 +14,12 @@ def filter_subset_visits(indices_visit_site, n_sites, n_total_visits_max, genera
     torch.Tensor
         Subsampled ``indices_visit_site``.
     """
-    print(f"Subsampling from {indices_visit_site.shape[0]} visits to {n_total_visits_max} visits.")
+    if verbose:
+        print(f"Subsampling from {indices_visit_site.shape[0]} visits to {n_total_visits_max} visits.")
 
     if keep_all_sites:
-        print("Keeping all sites, even those with few visits.")
+        if verbose:
+            print("Keeping all sites, even those with few visits.")
         assert n_total_visits_max >= n_sites, "If keep_all_sites is True, n_total_visits_max must be at least n_sites."
         assert (indices_visit_site[1:] >= indices_visit_site[:-1]).all(), "If keep_all_sites is True, indices_visit_site must be sorted by site."
         # e.g. indices_visit_site might look like: [0, 0, 0, 1, 2, 2, 2, 2, 3, ...] meaning site 0 has 3 visits, site 1 has 1 visits, site 2 has 4 visits, site 3 has 1 visit, etc.
@@ -23,23 +28,27 @@ def filter_subset_visits(indices_visit_site, n_sites, n_total_visits_max, genera
             (indices_visit_site[1:] != indices_visit_site[:-1]).nonzero(as_tuple=True)[0] + 1
         ])
         mandatory_visits = indices_visit_site[mandatory_indices]
-        print(f"Number of mandatory visits (one per site): {mandatory_visits.shape[0]}")
+        if verbose:
+            print(f"Number of mandatory visits (one per site): {mandatory_visits.shape[0]}")
         remaining_mask = torch.ones_like(indices_visit_site, dtype=torch.bool)
         remaining_mask[mandatory_indices] = False
         remaining_visits = indices_visit_site[remaining_mask]
         n_remaining = n_total_visits_max - mandatory_visits.shape[0]
-        print(f"Number of remaining visits to sample: {n_remaining}")
+        if verbose:
+            print(f"Number of remaining visits to sample: {n_remaining}")
         if n_remaining > 0 and remaining_visits.numel() > 0:
             n_sample = min(n_remaining, remaining_visits.shape[0])
             perm = torch.randperm(remaining_visits.shape[0], generator=generator)
             sampled_remaining = remaining_visits[perm[:n_sample]]
-            print(f"Number of sampled remaining visits: {sampled_remaining.shape[0]}")
+            if verbose:
+                print(f"Number of sampled remaining visits: {sampled_remaining.shape[0]}")
             indices_visit_site = torch.cat([mandatory_visits, sampled_remaining], dim=0)
         else:
             indices_visit_site = mandatory_visits
     
     else:
-        print("Without necessarily keeping all sites.")
+        if verbose:
+            print("Without necessarily keeping all sites.")
         perm = torch.randperm(indices_visit_site.shape[0], generator=generator)
         indices_visit_site = indices_visit_site[perm[:n_total_visits_max]] # shape: (n_visits_sub,)
     
@@ -125,7 +134,8 @@ def simulate_linear(
         if indices_visit_site.shape[0] > n_total_visits_max:
             indices_visit_site = filter_subset_visits(
                 indices_visit_site, n_sites, n_total_visits_max, 
-                generator=g, keep_all_sites=keep_all_sites
+                generator=g, keep_all_sites=keep_all_sites,
+                verbose=verbose
             )
     n_visits_per_site = torch.bincount(indices_visit_site, minlength=n_sites)  # shape: (n_sites,) (for each site, how many visits it has)
     # Reassign site indices to be consecutive after filtering
@@ -249,7 +259,8 @@ def simulate_non_linear(
         if indices_visit_site.shape[0] > n_total_visits_max:
             indices_visit_site = filter_subset_visits(
                 indices_visit_site, n_sites, n_total_visits_max, 
-                generator=g, keep_all_sites=keep_all_sites
+                generator=g, keep_all_sites=keep_all_sites,
+                verbose=verbose
             )
     n_visits_per_site = torch.bincount(indices_visit_site, minlength=n_sites)  # shape: (n_sites,) (for each site, how many visits it has)
     # Reassign site indices to be consecutive after filtering

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Optional
+import warnings
 
-import torch
 import torch.nn as nn
 
 from occupycy.models.base import OccuModel
@@ -29,7 +28,10 @@ class LinearOccuModel(OccuModel):
         if n_cov_psi < 0:
             raise ValueError("n_cov_psi must be non-negative.")
         elif n_cov_psi == 0:
-            print("Warning: n_cov_psi=0 results in no covariates for occupancy. Using constant block instead of linear.")
+            warnings.warn(
+                "n_cov_psi=0 results in no covariates for occupancy. Using constant block instead of linear.",
+                UserWarning
+            )
             self.psi_model = ConstantBlock(n_species)
         else:
             self.psi_model = nn.Linear(n_cov_psi, n_species)
@@ -38,7 +40,10 @@ class LinearOccuModel(OccuModel):
         if n_cov_d < 0:
             raise ValueError("n_cov_d must be non-negative.")
         elif n_cov_d == 0:
-            print("Warning: n_cov_d=0 results in no covariates for detection. Using constant block instead of linear.")
+            warnings.warn(
+                "n_cov_d=0 results in no covariates for detection. Using constant block instead of linear.",
+                UserWarning
+            )
             self.d_model = ConstantBlock(n_species)
         else:
             self.d_model = nn.Linear(n_cov_d, n_species)

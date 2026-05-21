@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Callable, Optional, Dict, Tuple
+import warnings
 
 import torch
 from tqdm import tqdm
@@ -215,7 +216,12 @@ def fit_sgd_like(
     else:
         n_sites_in_dataloader = len(set(next(iter(data.train_loader))["indices_visit_site"]))
         if n_sites_in_dataloader != batch_size:
-            print(f"Warning: provided dataloader has batch size {n_sites_in_dataloader}, which does not match the specified batch_size {batch_size}. Using the provided dataloader's batch size.")
+            warnings.warn(
+                f"Provided dataloader has batch size {n_sites_in_dataloader}, "
+                f"which does not match the specified batch_size {batch_size}. "
+                f"Using the provided dataloader's batch size.",
+                UserWarning
+            )
 
     # Penalization setup
     if penalization_type in ["l2_logits_naive", "l1_logits_naive"]:
