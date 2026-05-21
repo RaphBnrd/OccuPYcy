@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo_cropped.png" width="80%" alt="OccuPYcy logo">
+  <img src="assets/logo_cropped.png" width="70%" alt="OccuPYcy logo">
 </p>
 <!-- Colors: 
 dark green = #2B432A ; biege = #FEF8F5 ; orange = #EF702D ; 
@@ -39,6 +39,8 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
+If you want to use it in another project, you can clone the repository and install it in editable mode with `pip install -e /local/path/to/the/repository/OccuPYcy` from the root of the repository.
+
 ## Quick Start Example
 
 Here is an example of MLP model fitting on simulated data. See the [examples/](examples/) folder, with details of the example below in [01-fitting_on_simulated_data.ipynb](examples/01-fitting_on_simulated_data.ipynb). 
@@ -63,15 +65,15 @@ def true_f_psi(X_psi): # here X_psi of shape (n_sites, n_cov_psi=2)
 def true_f_d(X_d): # here X_d of shape (n_sites, n_cov_d=1)
     return torch.sigmoid(
         torch.tanh(5 * X_d[:,0]) - torch.cos(X_d[:,0])
-    ).unsqueeze(1) * 0.02
+    ).unsqueeze(1) * 0.2
 
 y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z = \
     occupycy.data.simulate_non_linear(
         n_sites=5000,
-        n_total_visits_max=int(1e6),
+        n_total_visits_max=int(1e5),
         n_cov_psi=2,
         n_cov_d=1,
-        f_effort = lambda x: torch.distributions.LogNormal(0, 3.5).sample((x.shape[0],)),
+        f_effort = lambda x: torch.distributions.LogNormal(0, 3).sample((x.shape[0],)),
         f_psi=true_f_psi,
         f_d=true_f_d,
         seed=seed,

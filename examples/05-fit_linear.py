@@ -103,7 +103,8 @@ def main():
     plt.figure(figsize=(8, 5))
 
     # Loop over different fitting methods
-    for fit_method in ["lbfgs_full_batch", "lbfgs_FB", "lbfgs", "sgd", "adam"]:
+    # for fit_method in ["lbfgs_full_batch", "lbfgs_FB", "lbfgs", "sgd", "adam"]:
+    for fit_method in ["adam"]:
     
         print(f"\n--- Fitting with {fit_method} ---")
         
@@ -159,6 +160,7 @@ def main():
             res = fit_sgd_like(
                 data, model, n_epochs=100, batch_size=100, 
                 lr_psi=1e-2, lr_d=1e-2,
+                val_fraction=0.15, test_fraction=0.1,
                 optimizer_psi_cls=torch.optim.Adam, optimizer_d_cls=torch.optim.Adam,
                 device=device
             )

@@ -219,8 +219,20 @@ def fit_sgd_like(
 
     # Penalization setup
     if penalization_type in ["l2_logits_naive", "l1_logits_naive"]:
+        if splitting is None or "train" not in splitting:
+            if data.train_loader is None:
+                raise ValueError("Splitting information is required for naive logits penalization. Please provide a splitting dictionary with a 'train' key or ensure that the dataloader is built with a train split.")
+            else:
+                train_sites_indices = []
+                for batch in data.train_loader:
+                    batch_site_indices = batch["indices_visit_site"].cpu().numpy()
+                    train_sites_indices.extend(batch_site_indices)
+                train_sites_indices = sorted(set(int(x) for x in train_sites_indices))
+                train_sites_ids = [data.site_ids_in_X_psi[i] for i in train_sites_indices]
+        else:
+            train_sites_ids = splitting["train"]
         center_logit_psi, center_logit_d, _, _ = fit_naive_estimator(
-            data=data.filtered_sites(splitting["train"]),
+            data=data.filtered_sites(train_sites_ids),
             loss_fn=loss_fn,
             device=device
         ) # naive logits of shape: (n_species,)

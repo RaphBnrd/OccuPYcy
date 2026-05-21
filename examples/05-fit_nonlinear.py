@@ -142,6 +142,11 @@ def main():
     # Build OccuData
     # -------------------------------------------------------------
     
+    # Give names to the site ids
+    fmt = f"site_{{:0{len(str(max(visit_site_ids)))}d}}"
+    visit_site_ids = [fmt.format(i) for i in visit_site_ids]
+    site_ids_in_X_psi = [fmt.format(i) for i in site_ids_in_X_psi]
+    
     data = OccuData(
         y=y, 
         visit_site_ids=visit_site_ids, 
