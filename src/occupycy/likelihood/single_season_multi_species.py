@@ -84,6 +84,7 @@ def nll_logits(
     indices_visit_site: torch.Tensor,
     site_reduction: SiteReduction = "sum",
     species_reduction: SpeciesReduction = "mean",
+    validate_inputs: bool = False,
 ) -> torch.Tensor:
     """
     Negative log-likelihood in logit space for single-season multi-species occupancy.
@@ -102,6 +103,10 @@ def nll_logits(
         Site-level reduction.
     species_reduction : {"mean", "sum", "none"}, default="mean"
         Species-level reduction.
+    validate_inputs : bool, default=False
+        Whether to validate input shapes, dtypes, and index consistency. 
+        Can be set to False for performance if inputs are guaranteed to be correct 
+        (e.g., when called from a training loop).
 
     Returns
     -------
@@ -113,7 +118,10 @@ def nll_logits(
     logit_d = torch.as_tensor(logit_d) # shape: (n_visits, n_species)
     indices_visit_site = torch.as_tensor(indices_visit_site) # shape: (n_visits,)
 
-    n_sites, _, n_species = _validate_inputs(y, logit_psi, logit_d, indices_visit_site)
+    if validate_inputs:
+        n_sites, _, n_species = _validate_inputs(y, logit_psi, logit_d, indices_visit_site)
+    else:
+        n_sites, n_species = logit_psi.shape
 
     device = y.device
     y_dtype = y.dtype
@@ -171,6 +179,7 @@ def nll_probs(
     indices_visit_site: torch.Tensor,
     site_reduction: SiteReduction = "sum",
     species_reduction: SpeciesReduction = "mean",
+    validate_inputs: bool = False,
     eps: float = 1e-8,
 ) -> torch.Tensor:
     """
@@ -190,6 +199,10 @@ def nll_probs(
         Site-level reduction.
     species_reduction : {"mean", "sum", "none"}, default="mean"
         Species-level reduction.
+    validate_inputs : bool, default=False
+        Whether to validate input shapes, dtypes, and index consistency. 
+        Can be set to False for performance if inputs are guaranteed to be correct 
+        (e.g., when called from a training loop).
     eps : float, default=1e-8
         Clamping value for numeric stability.
 
@@ -214,4 +227,5 @@ def nll_probs(
         indices_visit_site=indices_visit_site,
         site_reduction=site_reduction,
         species_reduction=species_reduction,
+        validate_inputs=validate_inputs
     )

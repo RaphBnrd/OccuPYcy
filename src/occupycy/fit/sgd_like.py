@@ -23,7 +23,8 @@ def forward_path_one_batch(
     loss_fn: Callable[..., torch.Tensor],
     site_reduction: str,
     species_reduction: str,
-    device: torch.device
+    device: torch.device,
+    validate_inputs_loss_fn: bool = False
 ):
     """
     Compute forward pass and loss for one batch.
@@ -42,6 +43,10 @@ def forward_path_one_batch(
         Reduction over species.
     device : torch.device
         Device used for computation.
+    validate_inputs_loss_fn : bool, default=False
+        Whether to validate inputs in the loss function. 
+        Can be set to False for performance if inputs are guaranteed to be correct 
+        (e.g., when called from a training loop).
 
     Returns
     -------
@@ -82,6 +87,7 @@ def forward_path_one_batch(
         indices_visit_site=indices_visit_site,
         site_reduction=site_reduction,
         species_reduction=species_reduction,
+        validate_inputs=validate_inputs_loss_fn
     )
 
     if not torch.isfinite(loss):
@@ -336,7 +342,8 @@ def fit_sgd_like(
                         loss_fn=loss_fn,
                         site_reduction=site_reduction,
                         species_reduction=species_reduction,
-                        device=device
+                        device=device,
+                        validate_inputs_loss_fn=epoch == 0 # validate inputs only in the first epoch for performance
                     )
                     penalty = loss_penalty(
                         penalization_type=penalization_type,
@@ -365,7 +372,8 @@ def fit_sgd_like(
                     loss_fn=loss_fn,
                     site_reduction=site_reduction,
                     species_reduction=species_reduction,
-                    device=device
+                    device=device,
+                    validate_inputs_loss_fn=epoch == 0 # validate inputs only in the first epoch for performance
                 )
                 penalty = loss_penalty(
                     penalization_type=penalization_type if penalization_type != "l2_params" else None, # L2 on parameters is handled by weight decay in the optimizer
@@ -383,9 +391,9 @@ def fit_sgd_like(
                 loss.backward()
                 opt_psi.step()
                 opt_d.step()
-                last_train_loss += float(loss.cpu().item())
-    
-        train_loss_history.append(last_train_loss)
+                last_train_loss += loss.detach()
+
+        train_loss_history.append(float(last_train_loss.cpu().item()))
         
         # Validation steps
         if data.val_loader is not None:
@@ -399,10 +407,11 @@ def fit_sgd_like(
                         loss_fn=loss_fn_eval,
                         site_reduction=site_reduction,
                         species_reduction=species_reduction,
-                        device=device
+                        device=device,
+                        validate_inputs_loss_fn=epoch == 0 # validate inputs only in the first epoch for performance
                     )
-                    last_val_loss += float(val_loss.cpu().item())
-            val_loss_history.append(last_val_loss)
+                    last_val_loss += val_loss.detach()
+            val_loss_history.append(float(last_val_loss.cpu().item()))
         else:
             last_val_loss = None
 
@@ -417,24 +426,6 @@ def fit_sgd_like(
                 final_params_model_psi = deepcopy(model.psi_model.state_dict())
                 final_params_model_d = deepcopy(model.d_model.state_dict())
                 epoch_best_model = epoch
-                save_checkpoint_if_best(
-                    path_checkpoints=path_checkpoints,
-                    epoch=epoch,
-                    last_train_loss=last_train_loss,
-                    last_val_loss=last_val_loss,
-                    final_params_model_psi=final_params_model_psi,
-                    final_params_model_d=final_params_model_d,
-                    opt_psi=opt_psi,
-                    opt_d=opt_d,
-                    opt=opt,
-                    optimizer_psi_cls=optimizer_psi_cls,
-                    optimizer_d_cls=optimizer_d_cls,
-                    train_loss_history=train_loss_history,
-                    val_loss_history=val_loss_history,
-                    lr_psi_history=lr_psi_history,
-                    lr_d_history=lr_d_history,
-                    verbose=False
-                )
         else:
             if last_train_loss < final_train_loss:
                 final_train_loss = last_train_loss

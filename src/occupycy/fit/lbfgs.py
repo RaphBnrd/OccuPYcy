@@ -190,6 +190,7 @@ def fit_lbfgs_full_batch(
             indices_visit_site=indices_visit_site,
             site_reduction=site_reduction,
             species_reduction=species_reduction,
+            validate_inputs=n_iter==0 # only validate on first iteration for performance
         )
 
         penalty = loss_penalty(
