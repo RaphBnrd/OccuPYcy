@@ -29,6 +29,7 @@ def main():
     # -------------------------------------------------------------
 
     # * * * Models for PSI * * *
+    # You can try various functions for true_f_psi
 
     n_cov_psi = 2
 
@@ -68,6 +69,7 @@ def main():
     
 
     # * * * Models for D * * *
+    # You can try various functions for true_f_d
 
     n_cov_d = 1
     
@@ -159,6 +161,9 @@ def main():
     # Define models, learning rates and fitting methods
     # -------------------------------------------------------------
     
+    # The dictionnary all_models contains various parameters for the different runs we want to try. 
+    # For each model setup, we can try different fitting methods, learning rates, and penalization schemes.
+
     all_models = {
         "linear_mlp-psi_16-d_16": {
             'model': LinearMLPOccuModel(

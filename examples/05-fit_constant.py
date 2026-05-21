@@ -7,7 +7,7 @@ from occupycy.data.simulate_data import simulate_constant
 
 from occupycy.data.core import OccuData
 from occupycy.fit import fit_lbfgs_full_batch, fit_sgd_like
-from occupycy.likelihood import nll_probs, nll_logits
+from occupycy.likelihood import nll_logits
 from occupycy.models import ConstantOccuModel
 
 
@@ -41,16 +41,6 @@ def main():
     n_sites = len(set(visit_site_ids))
     n_visits = len(visit_site_ids)
     
-    # nll_true = nll_probs(
-    #     y, indices_visit_site=torch.tensor(visit_site_ids), 
-    #     psi=true_psi.unsqueeze(0).expand(n_sites, -1),
-    #     d=true_d.unsqueeze(0).expand(n_visits, -1)
-    # ).item()
-    # nll_observed = nll_probs(
-    #     y, indices_visit_site=torch.tensor(visit_site_ids), 
-    #     psi=observed_psi.unsqueeze(0).expand(n_sites, -1),
-    #     d=observed_d.unsqueeze(0).expand(n_visits, -1)
-    # ).item()
     nll_true = nll_logits(
         y, indices_visit_site=torch.tensor(visit_site_ids), 
         logit_psi=torch.logit(true_psi.unsqueeze(0).expand(n_sites, -1)),
@@ -79,6 +69,7 @@ def main():
     # Build OccuData
     # -------------------------------------------------------------
     
+    # No covariates in this example, so no need for X_psi, X_d or site_ids_in_X_psi
     data = OccuData(y=y, visit_site_ids=visit_site_ids)
 
     
