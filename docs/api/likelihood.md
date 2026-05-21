@@ -1,0 +1,3 @@
+# Likelihoods
+
+::: occupycy.likelihood

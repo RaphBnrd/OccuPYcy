@@ -173,12 +173,14 @@ NB: The [examples](/examples) are numbered in the order of increasing complexity
 </p>
 
 Mathematically:
+
 - $Z_s \sim \mathrm{Bernoulli}(\psi_s)$  
   The latent occupancy state ($Z_s$) for site $s$.
 - $Y_v \mid Z_{s(v)} \sim \mathrm{Bernoulli}(d_v \cdot Z_{s(v)})$  
   The detection ($Y_v$) during visit $v$, conditional on the site's true state $Z_{s(v)}$.
 
 The probabilities $\psi_s$ (occupancy) and $d_v$ (detection) are flexible, parametric functions of covariates (e.g., spatial, temporal, observer info):
+
 - **Classically**, $\psi_s$ and $d_v$ are modeled as sigmoid-linear functions (logistic regression).
 - **With OccuPYcy**, these can be *any* differentiable model; in particular, a sigmoid transformation of an arbitrary PyTorch module, such as a neural network.
 
@@ -189,6 +191,7 @@ Then, for $K$ independent species, the likelihood of the observed data is:
 </p>
 
 where: 
+
 - $\mathcal{S}_{1,k}$ is the set of sites with at least one detection for species $k$
 - $\mathcal{S}_{0,k}$ is the set of sites with no detection for species $k$
 - $\mathcal{V}_s$ is the set of visits to site $s$
@@ -201,6 +204,7 @@ This likelihood is optimized with respect to the parameters $\theta_\psi$ and $\
 > where $f_{\theta_\psi}$ and $g_{\theta_d}$ can be linear, MLP, or any neural network.
 
 **Applications:**  
+
 - Well-suited for massive, opportunistic presence-only datasets, such as citizen science records (sites = spatial grid, visits = observations).
 - Corrects for both **detection** and **sampling** bias, enabling robust estimation of species distributions and trends.
 - Models uneven non-linear sampling and detection: complex and heterogeneous survey effort, or detection/reporting ability or willingness across space, time, and observers.
