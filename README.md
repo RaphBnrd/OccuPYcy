@@ -10,14 +10,14 @@ yellow = #FBB742 ; light green = #7AA92F
 **OccuPYcy** is an open-source <strong><ins>PY</ins></strong>thon package for site-<strong><ins>occu</ins></strong>pan<strong><ins>cy</ins></strong> modeling at scale. OccuPYcy provides tools for flexible, high-performance fitting of single or multi-species occupancy models using maximum likelihood with (stochastic) gradient-based optimization in [PyTorch](https://pytorch.org/). It is designed for scalability, deep model expressivity, and robust application to massive, uneven datasets—such as those from citizen science.
 
 ## Table of Contents
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start Example](#quick-start-example)
-- [Site-Occupancy Framework](#site-occupancy-framework)
-- [How to Cite](#how-to-cite)
-- [Contributing](#contributing)
-- [License](#license)
-- [Project Links](#project-links)
+- [Features](#-features)
+- [Installation](#-installation)
+- [Quick Start Example](#%EF%B8%8F-quick-start-example)
+- [Site-Occupancy Framework](#-site-occupancy-framework)
+- [How to Cite](#-how-to-cite)
+- [Contributing](#%EF%B8%8F-contributing)
+- [License](#-license)
+- [Project Links](#-project-links)
 
 # ✨ Features
 
@@ -186,15 +186,19 @@ The probabilities $\psi_s$ (occupancy) and $d_v$ (detection) are flexible, param
 
 Then, for $K$ independent species, the likelihood of the observed data is:
 $$
-\begin{aligned}
--\ell \Big( \theta_\psi, \theta_d \mid (y_{v,k})_{v,k} \Big) = \;
-& - \sum_{k=1}^K \sum_{s \in \mathcal{S}_{1,k}} \left[ 
-        \log(\psi_{s,k}) + \sum_{v \in \mathcal{V}_s} y_{v,k} \log(d_{v,k}) + (1 - y_{v,k}) \log(1 - d_{v,k})
-    \right] \\
-& - \sum_{k=1}^K \sum_{s \in \mathcal{S}_{0,k}} \log \left(
-        1 - \psi_{s,k} + \psi_{s,k} \prod_{v \in \mathcal{V}_s} (1 - d_{v,k})
-    \right)
-\end{aligned}
+-\ell \Big( \theta_\psi, \theta_d \mid (y_{v,k})_{v,k} \Big)
+= - \sum_{k=1}^K \sum_{s \in \mathcal{S}_{1,k}} \left[
+    \log(\psi_{s,k})
+    + \sum_{v \in \mathcal{V}_s} 
+        y_{v,k} \log(d_{v,k}) + (1 - y_{v,k}) \log(1 - d_{v,k})
+\right]
+$$
+
+$$
+- \sum_{k=1}^K \sum_{s \in \mathcal{S}_{0,k}} \log \left(
+    1 - \psi_{s,k}
+    + \psi_{s,k} \prod_{v \in \mathcal{V}_s} (1 - d_{v,k})
+\right)
 $$
 where $\mathcal{S}_{1,k}$ and $\mathcal{S}_{0,k}$ are the sets of sites with at least one detection and no detections for species $k$, respectively, and $\mathcal{V}_s$ is the set of visits to site $s$. 
 This likelihood is optimized with respect to the parameters $\theta_\psi$ and $\theta_d$ — the parameters of the occupancy and detection models — using (stochastic) gradient-based methods.
