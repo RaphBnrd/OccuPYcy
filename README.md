@@ -22,11 +22,31 @@ yellow = #FBB742 ; light green = #7AA92F
 We recommend using [uv](https://docs.astral.sh/uv/) for reproducible local development.  
 *Python ≥3.10 and PyTorch ≥2.0 recommanded.*
 
+
+### Using OccuPYcy in another project
+
+**From GitHub:** 
+Navigate to the repository on GitHub, create and activate your environment, and run:
+
+```bash
+uv pip install git+https://github.com/RaphBnrd/OccuPYcy.git
+```
+or if not using `uv`:
+```bash
+pip install git+https://github.com/RaphBnrd/OccuPYcy.git
+```
+
+**From the repository cloned on your machine:** 
+After cloning OccuPYcy (see next section), navigate to the repository root of your project, and install it in editable mode with: 
+```bash
+pip install -e /local/path/to/the/repository/OccuPYcy
+```
+
 ### Package download
 
 To download the code and install the dependencies, you should first clone the repository, using `git clone https://github.com/RaphBnrd/OccuPYcy.git` at the location of your choice. You can also download the code as a zip of clone using ssh.
 
-Then, if you want to setup a local development environment in the repository, you can use `uv` or `venv` to create a virtual environment and install the dependencies.
+Then, if you want to setup a local development environment in the repository, move to the repository root (`cd occupycy`) and you can use `uv` or `venv` to create a virtual environment and install the dependencies.
 
 ```bash
 uv venv
@@ -41,15 +61,6 @@ source .venv/bin/activate
 pip install -U pip
 pip install -e ".[dev]"
 pytest -q
-```
-
-### Using OccuPYcy in another project
-
-If you want to use it in another project, you can clone the repository on your machine. 
-
-Then, in the repository root of your project, install it in editable mode with: 
-```bash
-pip install -e /local/path/to/the/repository/OccuPYcy
 ```
 
 ## Quick Start Example
@@ -76,12 +87,12 @@ def true_f_psi(X_psi): # here X_psi of shape (n_sites, n_cov_psi=2)
 def true_f_d(X_d): # here X_d of shape (n_sites, n_cov_d=1)
     return torch.sigmoid(
         torch.tanh(5 * X_d[:,0]) - torch.cos(X_d[:,0])
-    ).unsqueeze(1) * 0.2
+    ).unsqueeze(1)
 
 y, visit_site_ids, site_ids_in_X_psi, X_psi, X_d, true_z = \
     occupycy.data.simulate_non_linear(
         n_sites=5000,
-        n_total_visits_max=int(1e5),
+        n_total_visits_max=int(1e4),
         n_cov_psi=2,
         n_cov_d=1,
         f_effort = lambda x: torch.distributions.LogNormal(0, 3).sample((x.shape[0],)),
