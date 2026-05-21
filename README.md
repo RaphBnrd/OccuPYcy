@@ -6,7 +6,7 @@ dark green = #2B432A ; biege = #FEF8F5 ; orange = #EF702D ;
 yellow = #FBB742 ; light green = #7AA92F
 -->
 
-**OccuPYcy** is an open-source <u>**PY**</u>thon package for site-<u>**occu**</u>pan<u>**cy**</u> modeling at scale. OccuPYcy provides tools for flexible, high-performance fitting of single or multi-species occupancy models using maximum likelihood with (stochastic) gradient-based optimization in [PyTorch](https://pytorch.org/). It is designed for scalability, deep model expressivity, and robust application to massive, uneven datasets—such as those from citizen science.
+**OccuPYcy** is an open-source <strong><ins>PY</ins></strong>thon package for site-<strong><ins>occu</ins></strong>pan<strong><ins>cy</ins></strong> modeling at scale. OccuPYcy provides tools for flexible, high-performance fitting of single or multi-species occupancy models using maximum likelihood with (stochastic) gradient-based optimization in [PyTorch](https://pytorch.org/). It is designed for scalability, deep model expressivity, and robust application to massive, uneven datasets—such as those from citizen science.
 
 ## Features
 
@@ -19,10 +19,14 @@ yellow = #FBB742 ; light green = #7AA92F
 
 ## Installation
 
-We recommend using [uv](https://github.com/astral-sh/uv) for reproducible local development.  
-*Python ≥3.8 and PyTorch ≥2.0 required.*
+We recommend using [uv](https://docs.astral.sh/uv/) for reproducible local development.  
+*Python ≥3.10 and PyTorch ≥2.0 recommanded.*
 
-### Quick local setup:
+### Package download
+
+To download the code and install the dependencies, you should first clone the repository, using `git clone https://github.com/RaphBnrd/OccuPYcy.git` at the location of your choice. You can also download the code as a zip of clone using ssh.
+
+Then, if you want to setup a local development environment in the repository, you can use `uv` or `venv` to create a virtual environment and install the dependencies.
 
 ```bash
 uv venv
@@ -39,7 +43,14 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-If you want to use it in another project, you can clone the repository and install it in editable mode with `pip install -e /local/path/to/the/repository/OccuPYcy` from the root of the repository.
+### Using OccuPYcy in another project
+
+If you want to use it in another project, you can clone the repository on your machine. 
+
+Then, in the repository root of your project, install it in editable mode with: 
+```bash
+pip install -e /local/path/to/the/repository/OccuPYcy
+```
 
 ## Quick Start Example
 
@@ -165,7 +176,7 @@ The probabilities $\psi_s$ (occupancy) and $d_v$ (detection) are flexible, param
 
 ## Contributing
 
-Contributions are welcome! Please open an [issue](https://github.com/RaphBnrd/Plantnet-Trend-Estimation/issues) or submit a pull request.
+Contributions are welcome! Please open an [issue](https://github.com/RaphBnrd/OccuPYcy/issues) or submit a pull request.
 
 ## License
 
