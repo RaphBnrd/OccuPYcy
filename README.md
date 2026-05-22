@@ -22,7 +22,7 @@ yellow = #FBB742 ; light green = #7AA92F
 - [Quick Start Example](#%EF%B8%8F-quick-start-example)
 - [Site-Occupancy Framework](#-site-occupancy-framework)
 - [How to Cite](#-how-to-cite)
-- [Contributing](#%EF%B8%8F-contributing)
+- [Contributing & Collaboration](#-contributing--collaboration)
 - [License](#-license)
 - [Project Links](#-project-links)
 
@@ -233,9 +233,11 @@ This likelihood is optimized with respect to the parameters $\theta_\psi$ and $\
 
 *Manuscript in preparation*
 
-# 🛠️ Contributing
+# 🤝 Contributing & Collaboration
 
-Contributions are welcome! Please open an [issue](https://github.com/RaphBnrd/OccuPYcy/issues) or submit a pull request.
+We welcome not only code contributions and bug reports, but also scientific collaborations — especially in ecology, citizen science, machine learning, and statistics! If you'd like to collaborate or have scientific ideas to discuss, feel free to [email me](mailto:raphael.benerradi@inria.fr) or open an [issue](https://github.com/RaphBnrd/OccuPYcy/issues).
+
+Standard code contributions (pull requests, feature requests, etc.) are also welcome.
 
 # 📜 License
 

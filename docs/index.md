@@ -6,6 +6,13 @@ dark green = #2B432A ; biege = #FEF8F5 ; orange = #EF702D ;
 yellow = #FBB742 ; light green = #7AA92F
 -->
 
+<!-- [![PyPI](https://img.shields.io/pypi/v/OccuPYcy.svg)](https://pypi.org/project/OccuPYcy/) -->
+<!-- ![Python](https://img.shields.io/pypi/pyversions/OccuPYcy) -->
+[![docs](https://img.shields.io/badge/docs-latest-blue)](https://raphbnrd.github.io/OccuPYcy/)
+![License](https://img.shields.io/github/license/RaphBnrd/OccuPYcy)
+![GitHub last commit](https://img.shields.io/github/last-commit/RaphBnrd/OccuPYcy)
+<!-- [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX) -->
+
 
 **OccuPYcy** is an open-source <strong><ins>PY</ins></strong>thon package for site-<strong><ins>occu</ins></strong>pan<strong><ins>cy</ins></strong> modeling at scale. OccuPYcy provides tools for flexible, high-performance fitting of single or multi-species occupancy models using maximum likelihood with (stochastic) gradient-based optimization in [PyTorch](https://pytorch.org/). It is designed for scalability, deep model expressivity, and robust application to massive, uneven datasets—such as those from citizen science.
 
@@ -15,7 +22,7 @@ yellow = #FBB742 ; light green = #7AA92F
 - [Quick Start Example](#quick-start-example)
 - [Site-Occupancy Framework](#site-occupancy-framework)
 - [How to Cite](#how-to-cite)
-- [Contributing](#contributing)
+- [Contributing & Collaboration](#contributing-collaboration)
 - [License](#license)
 - [Project Links](#project-links)
 
@@ -226,9 +233,11 @@ This likelihood is optimized with respect to the parameters $\theta_\psi$ and $\
 
 *Manuscript in preparation*
 
-# 🛠️ Contributing
+# 🤝 Contributing & Collaboration
 
-Contributions are welcome! Please open an [issue](https://github.com/RaphBnrd/OccuPYcy/issues) or submit a pull request.
+We welcome not only code contributions and bug reports, but also scientific collaborations — especially in ecology, citizen science, machine learning, and statistics! If you'd like to collaborate or have scientific ideas to discuss, feel free to [email me](mailto:raphael.benerradi@inria.fr) or open an [issue](https://github.com/RaphBnrd/OccuPYcy/issues).
+
+Standard code contributions (pull requests, feature requests, etc.) are also welcome.
 
 # 📜 License
 
