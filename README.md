@@ -175,8 +175,21 @@ NB: The [examples](/examples) are numbered in the order of increasing complexity
 
 **Site-occupancy models** estimate the probability that a species is present at a given site while accounting for imperfect detection during surveys ([MacKenzie et al. (2002)](https://doi.org/10.1890/0012-9658(2002)083[2248:ESORWD]2.0.CO;2)). This hierarchical approach is especially powerful for citizen science data, where both **detection bias** and **sampling bias** are common due to uneven survey effort and heterogeneous detection conditions.
 
+
+<p align="center">
+  <img src="assets/opportunistic_PO_data-diagram.png" width="80%" alt="Illustration of citizen science data bias">
+</p>
+
 <p align="center">
   <img src="assets/occupancy-diagram.png" width="60%" alt="Illustration of occupancy modeling framework">
+</p>
+
+<p align="center">
+  <sub>
+    <i>
+      Icon credits: icons from the figure sourced from Flaticon, created by Nikita Golubev, Freepik, Pixel Perfect, and surang.
+    </i>
+  </sub>
 </p>
 
 Mathematically:
@@ -216,18 +229,6 @@ This likelihood is optimized with respect to the parameters $\theta_\psi$ and $\
 - Corrects for both **detection** and **sampling** bias, enabling robust estimation of species distributions and trends.
 - Models uneven non-linear sampling and detection: complex and heterogeneous survey effort, or detection/reporting ability or willingness across space, time, and observers.
 - Handles multi-species data with shared covariates and common embedding.
-
-<p align="center">
-  <img src="assets/opportunistic_PO_data-diagram.png" width="60%" alt="Illustration of citizen science data bias">
-</p>
-
-<p align="center">
-  <sub>
-    <i>
-      Icon credits: icons from the figure sourced from Flaticon, created by Nikita Golubev, Freepik, Pixel Perfect, and surang.
-    </i>
-  </sub>
-</p>
 
 # 📖 How to Cite
 

@@ -361,7 +361,7 @@ def fit_sgd_like(
                     loss.backward()
                     return loss
                 opt.step(closure)
-                last_train_loss += closure().cpu().item()
+                last_train_loss += closure()
             
             else:
                 opt_psi.zero_grad()
@@ -393,7 +393,8 @@ def fit_sgd_like(
                 opt_d.step()
                 last_train_loss += loss.detach()
 
-        train_loss_history.append(float(last_train_loss.cpu().item()))
+        last_train_loss = float(last_train_loss.cpu().item())
+        train_loss_history.append(last_train_loss)
         
         # Validation steps
         if data.val_loader is not None:
@@ -411,7 +412,8 @@ def fit_sgd_like(
                         validate_inputs_loss_fn=epoch == 0 # validate inputs only in the first epoch for performance
                     )
                     last_val_loss += val_loss.detach()
-            val_loss_history.append(float(last_val_loss.cpu().item()))
+            last_val_loss = float(last_val_loss.cpu().item())
+            val_loss_history.append(last_val_loss)
         else:
             last_val_loss = None
 
