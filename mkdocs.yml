@@ -1,5 +1,4 @@
 site_name: OccuPYcy Documentation
-repo_url: https://github.com/RaphBnrd/OccuPYcy
 nav:
   - Home: index.md
   - API Reference: reference.md
