@@ -1,20 +1,21 @@
 from __future__ import annotations
 
-from typing import Callable, Optional, Dict, Tuple
 import warnings
+from collections.abc import Callable
+from copy import deepcopy
 
 import torch
 from tqdm import tqdm
-from copy import deepcopy
 
-from .result import FitResult
-from .early_stopper import EarlyStopper
 from occupycy.data import OccuData
 from occupycy.likelihood import nll_logits
-from occupycy.models import OccuModel
-from .naive_estimator import fit_naive_estimator
 from occupycy.likelihood.penalty import loss_penalty
+from occupycy.models import OccuModel
+
 from .checkpoints import save_checkpoint_if_best
+from .early_stopper import EarlyStopper
+from .naive_estimator import fit_naive_estimator
+from .result import FitResult
 
 
 def forward_path_one_batch(
@@ -24,7 +25,8 @@ def forward_path_one_batch(
     site_reduction: str,
     species_reduction: str,
     device: torch.device,
-    validate_inputs_loss_fn: bool = False
+    validate_inputs_loss_fn: bool = False,
+    sparse: bool = False
 ):
     """
     Compute forward pass and loss for one batch.
@@ -47,6 +49,8 @@ def forward_path_one_batch(
         Whether to validate inputs in the loss function. 
         Can be set to False for performance if inputs are guaranteed to be correct 
         (e.g., when called from a training loop).
+    sparse : bool, default=False
+        Whether to use sparse loss computation (for large number of species).
 
     Returns
     -------
@@ -58,7 +62,11 @@ def forward_path_one_batch(
     ValueError
         If computed loss is non-finite.
     """
-    y = batch["y"].to(device=device) # shape: (n_visits, n_species)
+    if not sparse:
+        y = batch["y"].to(device=device) # shape: (n_visits, n_species)
+    else:
+        y_visits = batch["y"][0].to(device=device) # shape: (n_detections,)
+        y_labels = batch["y"][1].to(device=device) # shape: (n_detections,)
     indices_visit_site = batch["indices_visit_site"].to(device=device)
     X_psi = batch["X_psi"] # shape: (n_sites, n_cov_psi) or None
     if X_psi is not None:
@@ -79,16 +87,28 @@ def forward_path_one_batch(
     if X_d is None:
         n_visits = y.shape[0]
         logit_d = logit_d.expand(n_visits, -1)
-    
-    loss = loss_fn(
-        y,
-        logit_psi=logit_psi,
-        logit_d=logit_d,
-        indices_visit_site=indices_visit_site,
-        site_reduction=site_reduction,
-        species_reduction=species_reduction,
-        validate_inputs=validate_inputs_loss_fn
-    )
+
+    if not sparse:
+        loss = loss_fn(
+            y,
+            logit_psi=logit_psi,
+            logit_d=logit_d,
+            indices_visit_site=indices_visit_site,
+            site_reduction=site_reduction,
+            species_reduction=species_reduction,
+            validate_inputs=validate_inputs_loss_fn
+        )
+    else:
+        loss = loss_fn(
+            y_visits,
+            y_labels,
+            logit_psi=logit_psi,
+            logit_d=logit_d,
+            indices_visit_site=indices_visit_site,
+            site_reduction=site_reduction,
+            species_reduction=species_reduction,
+            validate_inputs=validate_inputs_loss_fn
+        )
 
     if not torch.isfinite(loss):
         raise ValueError(f"Non-finite loss encountered: {loss.item()}")
@@ -109,23 +129,23 @@ def fit_sgd_like(
     site_reduction: str = "sum",
     species_reduction: str = "mean",
     loss_fn: Callable[..., torch.Tensor] = nll_logits,
-    loss_fn_eval: Optional[Callable[..., torch.Tensor]] = None,
-    device: Optional[torch.device] = None,
-    seed_dataloader: Optional[int] = None,
+    loss_fn_eval: Callable[..., torch.Tensor] | None = None,
+    device: torch.device | None = None,
+    seed_dataloader: int | None = None,
     val_fraction: float = 0.0,
     test_fraction: float = 0.0,
-    splitting: Optional[Dict[str, list]] = None,
-    patience_early_stopping: Optional[int] = None,
+    splitting: dict[str, list] | None = None,
+    patience_early_stopping: int | None = None,
     min_delta_early_stopping: float = 0.0,
     score_early_stopping: str = "val_loss",
-    patience_reduceLROnPlateau: Optional[int] = None,
+    patience_reduceLROnPlateau: int | None = None,
     factor_reduceLROnPlateau: float = 0.5,
     min_lr_reduceLROnPlateau: float = 1e-5,
     score_reduceLROnPlateau: str = "val_loss",
-    penalization_type: Optional[str] = None,
-    penalization_lambda_psi: Optional[float] = None,
-    penalization_lambda_d: Optional[float] = None,
-    path_checkpoints: Optional[str] = None
+    penalization_type: str | None = None,
+    penalization_lambda_psi: float | None = None,
+    penalization_lambda_d: float | None = None,
+    path_checkpoints: str | None = None
 ) -> FitResult:
     """
     Fit an occupancy model with mini-batch SGD-like optimization.
@@ -147,7 +167,7 @@ def fit_sgd_like(
     optimizer_psi_cls, optimizer_d_cls : callable, default=torch.optim.Adam
         Optimizer classes for occupancy and detection branches.
     site_reduction : str, default="sum"
-        Reduction over sites for the loss ("sum", "mean", or "none").
+        Reduction over sites for the loss ("sum", "mean", "mean_balanced", or "none").
     species_reduction : str, default="mean"
         Reduction over species for the loss ("sum", "mean", or "none").
     loss_fn : callable, default=nll_logits
@@ -239,7 +259,7 @@ def fit_sgd_like(
                 for batch in data.train_loader:
                     batch_site_indices = batch["indices_visit_site"].cpu().numpy()
                     train_sites_indices.extend(batch_site_indices)
-                train_sites_indices = sorted(set(int(x) for x in train_sites_indices))
+                train_sites_indices = sorted({int(x) for x in train_sites_indices})
                 train_sites_ids = [data.site_ids_in_X_psi[i] for i in train_sites_indices]
         else:
             train_sites_ids = splitting["train"]
@@ -325,6 +345,18 @@ def fit_sgd_like(
     final_train_loss, final_val_loss = float('inf'), float('inf')
     epoch_best_model = 0
 
+    # Deal with site reduction
+    balance_site_reduction_train = None
+    balance_site_reduction_val = None
+    if site_reduction == "mean_balanced":
+        site_reduction = "sum"
+        # 1 / average number of sites per batch = Nbr batches / Nbr sites
+        balance_site_reduction_train = len(data.train_loader) / len(data.train_loader.dataset)
+        if data.val_loader is not None:
+            balance_site_reduction_val = len(data.val_loader) / len(data.val_loader.dataset)
+    # loss = sum_b [ 1/(S/B) sum_sb ( loss_sb ) ]
+    #      = sum_b [ sum_sb ( B/S * loss_sb ) ]
+
     pbar = tqdm(range(n_epochs), desc="Epochs", unit="epoch")
     for epoch in range(n_epochs):
 
@@ -343,7 +375,8 @@ def fit_sgd_like(
                         site_reduction=site_reduction,
                         species_reduction=species_reduction,
                         device=device,
-                        validate_inputs_loss_fn=epoch == 0 # validate inputs only in the first epoch for performance
+                        validate_inputs_loss_fn=epoch == 0, # validate inputs only in the first epoch for performance
+                        sparse=data.sparse
                     )
                     penalty = loss_penalty(
                         penalization_type=penalization_type,
@@ -358,6 +391,8 @@ def fit_sgd_like(
                         species_reduction=species_reduction
                     )
                     loss = nll + penalty
+                    if balance_site_reduction_train is not None:
+                        loss *= balance_site_reduction_train
                     loss.backward()
                     return loss
                 opt.step(closure)
@@ -373,7 +408,8 @@ def fit_sgd_like(
                     site_reduction=site_reduction,
                     species_reduction=species_reduction,
                     device=device,
-                    validate_inputs_loss_fn=epoch == 0 # validate inputs only in the first epoch for performance
+                    validate_inputs_loss_fn=epoch == 0, # validate inputs only in the first epoch for performance
+                    sparse=data.sparse
                 )
                 penalty = loss_penalty(
                     penalization_type=penalization_type if penalization_type != "l2_params" else None, # L2 on parameters is handled by weight decay in the optimizer
@@ -388,6 +424,8 @@ def fit_sgd_like(
                     species_reduction=species_reduction
                 )
                 loss = nll + penalty
+                if balance_site_reduction_train is not None:
+                    loss *= balance_site_reduction_train
                 loss.backward()
                 opt_psi.step()
                 opt_d.step()
@@ -409,8 +447,11 @@ def fit_sgd_like(
                         site_reduction=site_reduction,
                         species_reduction=species_reduction,
                         device=device,
-                        validate_inputs_loss_fn=epoch == 0 # validate inputs only in the first epoch for performance
+                        validate_inputs_loss_fn=epoch == 0, # validate inputs only in the first epoch for performance
+                        sparse=data.sparse
                     )
+                    if balance_site_reduction_val is not None:
+                        val_loss *= balance_site_reduction_val
                     last_val_loss += val_loss.detach()
             last_val_loss = float(last_val_loss.cpu().item())
             val_loss_history.append(last_val_loss)
