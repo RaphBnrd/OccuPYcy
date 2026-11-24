@@ -10,9 +10,6 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "CECILL-2.1"
 license-files = ["LICENSE"]
-classifiers = [
-    "License :: CeCILL Free Software License Agreement v2.1",
-]
 authors = [{ name = "Raphaël Benerradi" }]
 dependencies = [
     "ipykernel>=7.0",
