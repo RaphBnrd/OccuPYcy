@@ -20,6 +20,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Use README as documentation homepage
+        run: |
+          cp README.md docs/index.md
+          cp -R assets docs/assets
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
