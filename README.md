@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo_cropped.png" width="70%" alt="OccuPYcy logo">
+  <img src="https://raw.githubusercontent.com/RaphBnrd/OccuPYcy/main/assets/logo_cropped.png" width="70%" alt="OccuPYcy logo">
 </p>
 <!-- Colors: 
 dark green = #2B432A ; biege = #FEF8F5 ; orange = #EF702D ; 
@@ -189,11 +189,11 @@ NB: The [examples](/examples) are numbered in the order of increasing complexity
 **Site-occupancy models** estimate the probability that a species is present at a given site while accounting for imperfect detection during surveys ([MacKenzie et al. (2002)](<https://doi.org/10.1890/0012-9658(2002)083[2248:ESORWD]2.0.CO;2>)). This hierarchical approach is especially powerful for citizen science data, where both **detection bias** and **sampling bias** are common due to uneven survey effort and heterogeneous detection conditions.
 
 <p align="center">
-  <img src="assets/opportunistic_PO_data-diagram.png" width="80%" alt="Illustration of citizen science data bias">
+  <img src="https://raw.githubusercontent.com/RaphBnrd/OccuPYcy/main/assets/opportunistic_PO_data-diagram.png" width="80%" alt="Illustration of citizen science data bias">
 </p>
 
 <p align="center">
-  <img src="assets/occupancy-diagram.png" width="60%" alt="Illustration of occupancy modeling framework">
+  <img src="https://raw.githubusercontent.com/RaphBnrd/OccuPYcy/main/assets/occupancy-diagram.png" width="60%" alt="Illustration of occupancy modeling framework">
 </p>
 
 <p align="center">
@@ -219,7 +219,7 @@ The probabilities $\psi_s$ (occupancy) and $d_v$ (detection) are flexible, param
 Then, for $K$ independent species, the likelihood of the observed data is:
 
 <p align="center">
-  <img src="assets/NLL_equation.png" width="90%" alt="Negative log-likelihood equation">
+  <img src="https://raw.githubusercontent.com/RaphBnrd/OccuPYcy/main/assets/NLL_equation.png" width="90%" alt="Negative log-likelihood equation">
 </p>
 
 where:
