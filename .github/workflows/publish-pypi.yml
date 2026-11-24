@@ -43,9 +43,13 @@ jobs:
           path = Path("pyproject.toml")
           contents = path.read_text()
           run_id = os.environ["GITHUB_RUN_ID"]
+          version_match = re.search(r'(?m)^version = "([^"]+)"$', contents)
+          if version_match is None:
+              raise SystemExit("Could not find the project version in pyproject.toml")
+          base_version = version_match.group(1)
           updated, replacements = re.subn(
               r'(?m)^version = "[^"]+"$',
-              f'version = "0.1.{run_id}"',
+              f'version = "{base_version}.{run_id}"',
               contents,
               count=1,
           )
