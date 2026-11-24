@@ -1,4 +1,4 @@
-name: Publish package to TestPyPI
+name: Publish package to PyPI
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: testpypi
+  group: pypi
   cancel-in-progress: false
 
 jobs:
@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-latest
 
     environment:
-      name: testpypi
-      url: https://test.pypi.org/p/occupycy
+      name: pypi
+      url: https://pypi.org/p/occupycy
 
     steps:
       - name: Check out repository
@@ -57,9 +57,9 @@ jobs:
       - name: Build distributions
         run: python -m build
 
-      - name: Publish distributions to TestPyPI
+      - name: Publish distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: https://test.pypi.org/legacy/
+          repository-url: https://upload.pypi.org/legacy/
           packages-dir: dist/
           skip-existing: true
