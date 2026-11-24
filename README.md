@@ -6,11 +6,11 @@ dark green = #2B432A ; biege = #FEF8F5 ; orange = #EF702D ;
 yellow = #FBB742 ; light green = #7AA92F
 -->
 
-<!-- [![PyPI](https://img.shields.io/pypi/v/OccuPYcy.svg)](https://pypi.org/project/OccuPYcy/) -->
-<!-- ![Python](https://img.shields.io/pypi/pyversions/OccuPYcy) -->
+[![PyPI](https://img.shields.io/pypi/v/OccuPYcy.svg)](https://pypi.org/project/OccuPYcy/)
+[![Python](https://img.shields.io/pypi/pyversions/OccuPYcy.svg)](https://pypi.org/project/OccuPYcy/)
 
 [![docs](https://img.shields.io/badge/docs-latest-blue)](https://raphbnrd.github.io/OccuPYcy/)
-![License](https://img.shields.io/github/license/RaphBnrd/OccuPYcy)
+[![License](https://img.shields.io/github/license/RaphBnrd/OccuPYcy.svg)](https://github.com/RaphBnrd/OccuPYcy/blob/main/LICENSE)
 ![GitHub last commit](https://img.shields.io/github/last-commit/RaphBnrd/OccuPYcy)
 <!-- [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX) -->
 
