@@ -8,19 +8,17 @@ version = "0.0.1"
 description = "Occupancy modeling with maximum likelihood estimation in Python"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {file = "LICENSE"}
-classifiers = [
-  "License :: OSI Approved :: MIT License",
-]
-authors = [{name = "Raphaël Benerradi"}]
+license = { file = "LICENSE" }
+classifiers = ["License :: OSI Approved :: MIT License"]
+authors = [{ name = "Raphaël Benerradi" }]
 dependencies = [
-  "ipykernel>=7.0",
-  "matplotlib>=3.0",
-  "pandas>=2.0",
-  "polars>=1.0",
-  "numpy>=2.0",
-  "torch>=2.0",
-  "tqdm>=4.0",
+    "ipykernel>=7.0",
+    "matplotlib>=3.0",
+    "pandas>=2.0",
+    "polars>=1.0",
+    "numpy>=2.0",
+    "torch>=2.0",
+    "tqdm>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -30,7 +28,7 @@ dev = ["pytest>=7"]
 Documentation = "https://raphbnrd.github.io/OccuPYcy/"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

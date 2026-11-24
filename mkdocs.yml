@@ -1,9 +1,5 @@
 site_name: OccuPYcy Documentation
 repo_url: https://github.com/RaphBnrd/OccuPYcy
-nav:
-  - Home: index.md
-  - API Reference: reference.md
-
 theme:
   name: material
 
@@ -23,6 +19,10 @@ nav:
       - Fitting: api/fit.md
       - Models: api/models.md
       - Likelihoods: api/likelihood.md
+
+# The old combined API page duplicates the canonical pages above and causes
+# mkdocstrings to report ambiguous cross-reference targets.
+exclude_docs: reference.md
 
 markdown_extensions:
   - attr_list
