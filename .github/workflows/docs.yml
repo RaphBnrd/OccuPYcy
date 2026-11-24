@@ -24,6 +24,19 @@ jobs:
         run: |
           cp README.md docs/index.md
           cp -R assets docs/assets
+          sed -i \
+            -e 's#(examples/#(https://github.com/RaphBnrd/OccuPYcy/tree/main/examples/#g' \
+            -e 's#](/examples)#](https://github.com/RaphBnrd/OccuPYcy/tree/main/examples)#g' \
+            -e 's#(LICENSE)#(https://github.com/RaphBnrd/OccuPYcy/blob/main/LICENSE)#g' \
+            -e 's/#-features/#features/g' \
+            -e 's/#-installation/#installation/g' \
+            -e 's/#%EF%B8%8F-quick-start-example/#quick-start-example/g' \
+            -e 's/#-site-occupancy-framework/#site-occupancy-framework/g' \
+            -e 's/#-how-to-cite/#how-to-cite/g' \
+            -e 's/#-contributing--collaboration/#contributing-collaboration/g' \
+            -e 's/#-license/#license/g' \
+            -e 's/#-project-links/#project-links/g' \
+            docs/index.md
 
       - name: Set up Python
         uses: actions/setup-python@v5
