@@ -4,6 +4,7 @@ import warnings
 
 import torch
 from torch.utils.data import DataLoader, Dataset, Subset
+from tqdm import tqdm
 
 # -------------------------------------------------------------
 #  OccuData: canonical data container for occupancy modeling
@@ -237,10 +238,13 @@ class OccuData:
             ``i``-th tensor contains visit indices belonging to site ``i``.
         """
         if self._mask_visits_each_site is None:
-            self._mask_visits_each_site = [
-                torch.where(self.indices_visit_site == i)[0]
-                for i in range(self.n_sites)
-            ]
+            # self._mask_visits_each_site = [
+            #     torch.where(self.indices_visit_site == i)[0]
+            #     for i in tqdm(range(self.n_sites), desc="Building mask_visits_each_site")
+            # ]
+            order = torch.argsort(self.indices_visit_site, stable=True)
+            counts = torch.bincount(self.indices_visit_site, minlength=self.n_sites)
+            self._mask_visits_each_site = list(torch.split(order, counts.tolist()))
         return self._mask_visits_each_site
     
     @property
@@ -254,12 +258,17 @@ class OccuData:
             ``i``-th tensor contains detection indices belonging to site ``i``.
         """
         if self._mask_detections_each_site is None:
-            # Get the visit indices for each site
-            mask_visits_each_site = self.mask_visits_each_site
-            # Then, for each site, get the detection indices corresponding to those visits
+            # # Get the visit indices for each site
+            # mask_visits_each_site = self.mask_visits_each_site
+            # # Then, for each site, get the detection indices corresponding to those visits
+            # self._mask_detections_each_site = [
+            #     torch.where(torch.isin(self.y_visits, mask_visits_each_site[i]))[0]
+            #     for i in tqdm(range(self.n_sites), desc="Building mask_detections_each_site")
+            # 
+            site_of_visit = self.indices_visit_site[self.y_visits]
             self._mask_detections_each_site = [
-                torch.where(torch.isin(self.y_visits, mask_visits_each_site[i]))[0]
-                for i in range(self.n_sites)
+                torch.where(site_of_visit == i)[0]
+                for i in tqdm(range(self.n_sites), desc="Building mask_detections_each_site", position=1, leave=False)
             ]
         return self._mask_detections_each_site
 

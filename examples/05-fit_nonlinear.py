@@ -9,7 +9,7 @@ from utils_plots import non_lin_initialize_plots, non_lin_plot_each_loop, non_li
 
 from occupycy.data import OccuData
 from occupycy.fit import fit_lbfgs_full_batch, fit_sgd_like
-from occupycy.likelihood import nll_probs, nll_logits
+from occupycy.likelihood import nll_probs, nll_logits, nll_logits_sparse
 from occupycy.models import MLPOccuModel, LinearMLPOccuModel
 from occupycy.models.mlp import MLPBlock
 
@@ -20,9 +20,11 @@ elif torch.backends.mps.is_available():
     device = torch.device("mps")
 else:
     device = torch.device("cpu")
-# device = torch.device("cpu")
+device = torch.device("cpu")
 
 def main():
+
+    sparse_version = True
 
     # -------------------------------------------------------------
     # Simulate data
@@ -148,14 +150,28 @@ def main():
     fmt = f"site_{{:0{len(str(max(visit_site_ids)))}d}}"
     visit_site_ids = [fmt.format(i) for i in visit_site_ids]
     site_ids_in_X_psi = [fmt.format(i) for i in site_ids_in_X_psi]
-    
-    data = OccuData(
-        y=y, 
-        visit_site_ids=visit_site_ids, 
-        X_psi=X_psi, 
-        X_d=X_d,
-        site_ids_in_X_psi=site_ids_in_X_psi
-    )
+
+    if not sparse_version:
+        # Non-sparse version of OccuData (y is a dense tensor of shape (n_visits, n_species))
+        data = OccuData(
+            y=y, 
+            visit_site_ids=visit_site_ids, 
+            X_psi=X_psi, 
+            X_d=X_d,
+            site_ids_in_X_psi=site_ids_in_X_psi
+        )
+    else:
+        # Sparse version of OccuData
+        data = OccuData(
+            y_visits=torch.where(y == 1)[0], 
+            y_labels=torch.where(y == 1)[1],
+            visit_site_ids=visit_site_ids, 
+            X_psi=X_psi, 
+            X_d=X_d,
+            site_ids_in_X_psi=site_ids_in_X_psi,
+            species_ids_ordered=[f'sp_{i}' for i in range(y.shape[1])]
+        )
+
 
     # -------------------------------------------------------------
     # Define models, learning rates and fitting methods
@@ -284,7 +300,12 @@ def main():
     # Compute naive estimators (just curiosity check)
 
     from occupycy.fit.naive_estimator import fit_naive_estimator
-    center_logit_psi, center_logit_d, _, _ = fit_naive_estimator(data=data)
+    try:
+        center_logit_psi, center_logit_d, _, _ = fit_naive_estimator(data=data)
+    except Exception as e:
+        print(f"Naive estimator failed: {e}")
+        center_logit_psi = torch.zeros(y.shape[1], device=device)
+        center_logit_d = torch.zeros(y.shape[1], device=device)
     print("Naive estimators:")
     print(f"  psi: {torch.sigmoid(center_logit_psi).cpu().numpy()}")
     print(f"  d:   {torch.sigmoid(center_logit_d).cpu().numpy()}")
@@ -367,7 +388,8 @@ def main():
                     device=device,
                     penalization_type=penalization_type,
                     penalization_lambda_psi=penalization_lambda_psi,
-                    penalization_lambda_d=penalization_lambda_d
+                    penalization_lambda_d=penalization_lambda_d,
+                    loss_fn=nll_logits_sparse if data.sparse else nll_logits
                 )
 
             elif fit_method == "adam":
@@ -379,7 +401,8 @@ def main():
                     device=device,
                     penalization_type=penalization_type,
                     penalization_lambda_psi=penalization_lambda_psi,
-                    penalization_lambda_d=penalization_lambda_d
+                    penalization_lambda_d=penalization_lambda_d,
+                    loss_fn=nll_logits_sparse if data.sparse else nll_logits
                 )
 
             # * * * Store results * * *
