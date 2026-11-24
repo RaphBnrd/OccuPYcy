@@ -1,3 +1,19 @@
+<p align="center">
+  <img src="assets/logo_cropped.png" width="70%" alt="OccuPYcy logo">
+</p>
+<!-- Colors: 
+dark green = #2B432A ; biege = #FEF8F5 ; orange = #EF702D ; 
+yellow = #FBB742 ; light green = #7AA92F
+-->
+
+<!-- [![PyPI](https://img.shields.io/pypi/v/OccuPYcy.svg)](https://pypi.org/project/OccuPYcy/) -->
+<!-- ![Python](https://img.shields.io/pypi/pyversions/OccuPYcy) -->
+[![docs](https://img.shields.io/badge/docs-latest-blue)](https://raphbnrd.github.io/OccuPYcy/)
+![License](https://img.shields.io/github/license/RaphBnrd/OccuPYcy)
+![GitHub last commit](https://img.shields.io/github/last-commit/RaphBnrd/OccuPYcy)
+<!-- [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX) -->
+
+
 **OccuPYcy** is an open-source <strong><ins>PY</ins></strong>thon package for site-<strong><ins>occu</ins></strong>pan<strong><ins>cy</ins></strong> modeling at scale. OccuPYcy provides tools for flexible, high-performance fitting of single or multi-species occupancy models using maximum likelihood with (stochastic) gradient-based optimization in [PyTorch](https://pytorch.org/). It is designed for scalability, deep model expressivity, and robust application to massive, uneven datasets—such as those from citizen science.
 
 ## Table of Contents
@@ -31,7 +47,16 @@ You can install OccuPYcy as a dependency in your project either from GitHub or f
 
 **From PyPI:** *(coming soon🤞)*
 
-**From GitHub:** `hidden for anonymity reason`
+**From GitHub:** 
+Navigate to the repository on GitHub, create and activate your environment, and run:
+
+```bash
+uv pip install git+https://github.com/RaphBnrd/OccuPYcy.git
+```
+or if not using `uv`:
+```bash
+pip install git+https://github.com/RaphBnrd/OccuPYcy.git
+```
 
 **From the repository cloned on your machine:** 
 After cloning OccuPYcy (see below), navigate to the repository root of your project, and install it in editable mode with: 
@@ -41,7 +66,9 @@ pip install -e /local/path/to/the/repository/OccuPYcy
 
 ## Source code download
 
-If you want to setup a local development environment in the repository, move to the repository root (`cd occupycy`) and you can use `uv` or `venv` to create a virtual environment and install the dependencies.
+To download the source code and install the dependencies, you should first clone the repository, using `git clone https://github.com/RaphBnrd/OccuPYcy.git` at the location of your choice. You can also download the code as a zip or clone using SSH.
+
+Then, if you want to setup a local development environment in the repository, move to the repository root (`cd occupycy`) and you can use `uv` or `venv` to create a virtual environment and install the dependencies.
 
 ```bash
 uv venv
@@ -207,6 +234,19 @@ This likelihood is optimized with respect to the parameters $\theta_\psi$ and $\
 
 *Manuscript in preparation*
 
+# 🤝 Contributing & Collaboration
+
+We welcome not only code contributions and bug reports, but also scientific collaborations — especially in ecology, citizen science, machine learning, and statistics! If you'd like to collaborate or have scientific ideas to discuss, feel free to [email me](mailto:raphael.benerradi@inria.fr) or open an [issue](https://github.com/RaphBnrd/OccuPYcy/issues).
+
+Standard code contributions (pull requests, feature requests, etc.) are also welcome.
+
 # 📜 License
 
 OccuPYcy is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+# 🔗 Project Links
+
+- [Source code on GitHub](https://github.com/RaphBnrd/OccuPYcy)
+- [Example usage](examples/) in the repository
+- [PhD project](https://raphbnrd.github.io/projects/mapping_plant_species/) section on my website
+- For questions, contact [raphael.benerradi@inria.fr](mailto:raphael.benerradi@inria.fr)
