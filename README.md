@@ -34,7 +34,7 @@ yellow = #FBB742 ; light green = #7AA92F
 - **Supports Large, Heterogeneous Datasets:** Memory mapping and efficient batching for millions of observations with highly uneven visits per site. Suited for citizen science data with variable sampling and detection effort.
 - **Multiple Optimizers:** LBFGS, SGD, Adam, and other first- and second-order optimizers.
 - **Penalized Estimation:** Easily apply L1/L2 regularization and other penalties.
-- **Open Source:** code available on GitHub under the MIT License, soon on PyPI. _A scientific publication describing and applying the method is in preparation._
+- **Open Source:** code available on [PyPI](https://pypi.org/project/OccuPYcy/) and on GitHub under the CeCILL-2.1 License. _A scientific publication describing and applying the method is in preparation._
 
 # 📦 Installation
 
@@ -59,12 +59,6 @@ pip install occupycy
 
 **From GitHub:**
 Navigate to your repository, create and activate your environment, and run:
-
-```bash
-uv pip install git+https://github.com/RaphBnrd/OccuPYcy.git
-```
-
-or if not using `uv`:
 
 ```bash
 pip install git+https://github.com/RaphBnrd/OccuPYcy.git
@@ -254,7 +248,7 @@ Standard code contributions (pull requests, feature requests, etc.) are also wel
 
 # 📜 License
 
-OccuPYcy is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+OccuPYcy is licensed under the CeCILL-2.1 License. See the [LICENSE](LICENSE) file for details.
 
 # 🔗 Project Links
 
