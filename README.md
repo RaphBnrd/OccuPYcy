@@ -102,7 +102,7 @@ pytest -q
 # ⚡️ Quick Start Example
 
 Below is an example fitting a Multi-Layer Perceptron (MLP) occupancy model on simulated data.  
-Other examples are available in the [examples/](examples/) folder. More details on the code below are available in the notebook [01-fitting_on_simulated_data.ipynb](examples/01-fitting_on_simulated_data.ipynb).
+Other examples are available in the [examples/](https://github.com/RaphBnrd/OccuPYcy/tree/main/examples/) folder. More details on the code below are available in the notebook [01-fitting_on_simulated_data.ipynb](https://github.com/RaphBnrd/OccuPYcy/tree/main/examples/01-fitting_on_simulated_data.ipynb).
 
 ```python
 import torch
@@ -259,6 +259,6 @@ OccuPYcy is licensed under the MIT License. See the [LICENSE](LICENSE) file for 
 # 🔗 Project Links
 
 - [Source code on GitHub](https://github.com/RaphBnrd/OccuPYcy)
-- [Example usage](examples/) in the repository
+- [Example usage](https://github.com/RaphBnrd/OccuPYcy/tree/main/examples/) in the repository
 - [PhD project](https://raphbnrd.github.io/projects/mapping_plant_species/) section on my website
 - For questions, contact [raphael.benerradi@inria.fr](mailto:raphael.benerradi@inria.fr)
